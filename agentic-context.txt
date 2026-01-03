@@ -1,0 +1,59 @@
+﻿This document serves as the Technical Master Specification and Context File for Project Cardea. It is designed to provide an Agentic AI with the full architectural blueprint, functional data flow, and identity constraints required to develop or operate the platform.
+
+
+--------------------------------------------------------------------------------
+1. Project Identity & Purpose
+Project Cardea is a hybrid, agentic AI cybersecurity platform tailored for Small-to-Medium Enterprises (SMEs) and institutions like schools and hospitals. It addresses the vulnerability of SMEs to sophisticated "midnight" attacks by providing a cost-effective alternative to 24/7 Security Operations Centers (SOC). The system is split into two distinct identities: The Cardea Sentry (Local "Reflex") and The Cardea Oracle (Cloud "Brain").
+2. System Architecture
+A. The Edge Layer: Cardea Sentry (The Reflex)
+The Sentry resides physically within the business network, acting as the first line of defense.
+• Host Hardware: Portable devices such as a Lenovo ThinkPad X230 or a Mini-PC.
+• Operating System: Linux (Arch preferred) running Docker.
+• Core Containers (Docker-Compose):
+    ◦ Zeek: A passive network analyzer for logging connection details (IPs, ports, bytes).
+    ◦ Suricata: A real-time Intrusion Detection System (IDS) for flagging known malicious patterns.
+    ◦ KitNET: An unsupervised AI engine (ensemble of autoencoders) that assigns an anomaly score (0.0–1.0) to every packet.
+    ◦ The Bridge: A Python script that monitors KitNET scores; it triggers an escalation if the score exceeds 0.95.
+• Local Interface: A Local Web GUI (accessible at cardea.local) built with Shadcn UI for non-technical setup, featuring Network Status, Cloud Pairing, and Update buttons.
+B. The Cloud Layer: Cardea Oracle (The Brain)
+The Oracle provides global threat intelligence and the human-readable management interface.
+• Backend: FastAPI (Python) server to receive JSON alerts from the Sentry.
+• Orchestration: Azure AI Foundry manages the agentic workflow.
+• AI Services:
+    ◦ Azure OpenAI: Uses GPT-4o or Phi-4 for reasoning and threat analysis.
+    ◦ Azure AI Search: A RAG (Retrieval-Augmented Generation) system containing 2026 threat intelligence.
+• Database: Supabase (PostgreSQL) for time-series logs and user metadata.
+C. The User Layer (The Interface)
+• Platform: Responsive web app built with Next.js/React.
+• Visuals: React Flow for network node mapping and Shadcn UI for dashboard components.
+
+
+--------------------------------------------------------------------------------
+3. Functional Data Flow (Perceive -> Reason -> Act)
+1. Ingestion: Zeek and Suricata monitor local traffic passively.
+2. Detection: KitNET flags an anomaly (e.g., a 0.99 score for unusual 2:00 AM data transfer).
+3. Escalation: The "Bridge" script pushes a JSON snapshot (Alert Type, IP, Timestamp, Raw Log) to the Cloud API via HTTPS POST or WebSockets.
+4. Reasoning: The Azure AI Agent queries the RAG Knowledge Base to determine if the anomaly matches known ransomware or malicious activity.
+5. Translation: The AI generates a "Human Language" explanation for the owner (e.g., "Your POS terminal is acting unusual. We’ve paused it to protect your data.").
+6. Action: The owner receives a push notification and clicks "Confirm Block" or "Authorize" on their dashboard.
+
+
+--------------------------------------------------------------------------------
+4. Setup and Userflow
+To ensure ease of use for non-technical owners, the setup follows a specific path:
+1. Install: Owner plugs the hardware into the router; it boots into the Sentry.
+2. Link: Owner accesses the Local Web GUI via a browser to connect to the network.
+3. Pair: Owner enters a 6-digit code from the local screen into their Cloud Oracle account to establish the outbound webhook.
+4. Protect: Sentry begins "learning" the network baseline locally using KitNET.
+
+
+--------------------------------------------------------------------------------
+5. Agentic Prompting Strategy
+The AI is instructed to function as an Agent, not a chatbot. Its configuration must include:
+• Role: Senior Cyber-Analyst.
+• Constraint: Must provide inclusive, non-technical summaries for the business owner.
+• Context: All reasoning must be grounded in real-time network logs and updated RAG-based threat intelligence.
+
+
+--------------------------------------------------------------------------------
+Analogy for Understanding: Think of Project Cardea as a smart security guard for a building. The Sentry is the guard on-site who notices a door has been left open at midnight (the anomaly). Instead of making a complex decision alone, he sends a photo (the JSON metadata) to the Oracle, a remote chief of security with a massive library of criminal tactics. The chief recognizes the tactic, calls the building owner on their phone, and asks, "I see a suspicious person; should I lock the front gate?" The owner simply says "Yes" to neutralize the threat.
