@@ -16,15 +16,10 @@ if [[ "$(uname)" != "Linux" ]]; then
     exit 1
 fi
 
-# Check network interface
-if ! ip link show eth0 &>/dev/null && ! ip link show wlan0 &>/dev/null; then
-    echo "⚠️  Neither eth0 nor wlan0 found, but continuing..."
-    echo "   Make sure to set ZEEK_INTERFACE and SURICATA_INTERFACE appropriately"
-fi
-
-# Check Docker capabilities
-if ! docker info | grep -q "Runtimes.*runc"; then
-    echo "❌ Docker runtime not properly configured"
+# Run platform detection and validation
+echo "🌍 Running platform detection..."
+if ! /workspaces/cardea/scripts/setup-platform.sh; then
+    echo "❌ Platform detection and setup failed"
     exit 1
 fi
 
@@ -43,9 +38,14 @@ echo "📁 Creating Zeek log directories..."
 mkdir -p data/zeek/{current,archive}
 mkdir -p data/{suricata,kitnet,bridge}
 
-# Start services with host networking
-echo "🌐 Starting services with host networking..."
-docker compose up -d
+# Start services with platform-aware configuration
+echo "🌐 Starting services with platform-aware configuration..."
+if [ -f "start-platform.sh" ]; then
+    ./start-platform.sh
+else
+    # Fallback to standard docker compose
+    docker compose up -d
+fi
 
 # Wait for services to initialize
 echo "⏳ Waiting for services to initialize (60 seconds)..."
@@ -162,14 +162,14 @@ echo ""
 echo "🎉 INSTITUTIONAL SENTRY VALIDATION COMPLETE"
 echo "=========================================="
 echo "✅ All critical fixes successfully applied:"
-echo "   1. ✅ Host networking for direct interface access (Arch Linux compatible)"
+echo "   1. ✅ Platform-aware networking (auto-detected interface)"
 echo "   2. ✅ Real Zeek log monitoring (conn.log tailer implemented)"
 echo "   3. ✅ Fast KitNET training (1000 samples) with proper Zeek field mapping"
 echo "   4. ✅ Enhanced evidence snapshots for Oracle AI analysis"
 echo ""
-echo "🏛️  INSTITUTIONAL GRADE: READY FOR DEPLOYMENT"
-echo "📡 Network monitoring: ACTIVE"
+echo "🌍 PLATFORM-AWARE INSTITUTIONAL GRADE: READY FOR DEPLOYMENT"
+echo "📡 Network monitoring: ACTIVE on $DETECTED_INTERFACE"
 echo "🤖 AI anomaly detection: CALIBRATED"
 echo "🧠 Oracle integration: ENHANCED"
 echo ""
-echo "🚀 Sentry is now ready for real-world institutional deployment!"
+echo "🚀 Sentry is now ready for real-world deployment on any Linux platform!"

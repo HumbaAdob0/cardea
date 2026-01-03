@@ -8,7 +8,8 @@ help:
 	@echo "Project Cardea - Hybrid AI Cybersecurity Platform"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  dev-setup      Set up development environment"
+	@echo "  dev-setup      Set up development environment with platform detection"
+	@echo "  platform-info  Show detected platform information"
 	@echo "  clean          Clean all build artifacts and containers"
 	@echo "  test           Run all tests"
 	@echo "  lint           Run linting across all components"
@@ -27,7 +28,7 @@ help:
 # Development environment setup
 dev-setup:
 	@echo "Setting up Project Cardea development environment..."
-	@scripts/setup-dev.sh
+	@scripts/setup-platform.sh
 
 # Clean all artifacts
 clean:
@@ -82,3 +83,13 @@ integration:
 deploy-local:
 	@echo "Deploying full stack locally..."
 	@docker compose up -d
+
+# Platform awareness
+platform-info:
+	@echo "Detecting platform information..."
+	@cd shared/utils && python3 -c "from platform_detector import platform_detector; from environment_configurator import EnvironmentConfigurator; print(EnvironmentConfigurator().generate_platform_report())" 2>/dev/null || echo "❌ Platform detection requires: pip install pyyaml"
+
+# Platform awareness
+platform-info:
+	@echo "Detecting platform information..."
+	@python3 shared/utils/platform_detector.py || echo "Platform detection requires Python dependencies"
