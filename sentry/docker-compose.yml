@@ -4,6 +4,10 @@
 services:
   # Zeek - Passive network analysis and logging
   zeek:
+    user: "root"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     build: 
       context: ./services/zeek
       dockerfile: Dockerfile
@@ -16,15 +20,16 @@ services:
       - ZEEK_INTERFACE=${ZEEK_INTERFACE:-auto}
       - DEV_MODE=${DEV_MODE:-true}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
     restart: unless-stopped
     depends_on:
       - bridge
 
   # Suricata - Real-time Intrusion Detection System
   suricata:
+    user: "root"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     build:
       context: ./services/suricata
       dockerfile: Dockerfile
@@ -36,15 +41,13 @@ services:
     environment:
       - SURICATA_INTERFACE=${SURICATA_INTERFACE:-eth0}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
     restart: unless-stopped
     depends_on:
       - bridge
 
   # KitNET - AI-based anomaly detection
   kitnet:
+    user: "root"
     build:
       context: ./services/kitnet
       dockerfile: Dockerfile
