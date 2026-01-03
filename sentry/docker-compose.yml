@@ -13,7 +13,7 @@ services:
     network_mode: "host"
     volumes:
       - ./data/zeek:/opt/zeek/logs
-      - ./config/zeek:/opt/zeek/etc:ro
+      - ./services/zeek/config:/opt/zeek/etc
     environment:
       - ZEEK_INTERFACE=${ZEEK_INTERFACE:-eth0}
       - LOG_LEVEL=${LOG_LEVEL:-info}
@@ -33,7 +33,7 @@ services:
     network_mode: "host"
     volumes:
       - ./data/suricata:/var/log/suricata
-      - ./config/suricata:/etc/suricata:ro
+      - ./services/suricata/config:/etc/suricata/custom
     environment:
       - SURICATA_INTERFACE=${SURICATA_INTERFACE:-eth0}
       - LOG_LEVEL=${LOG_LEVEL:-info}
@@ -52,8 +52,8 @@ services:
     container_name: cardea-kitnet
     volumes:
       - ./data/kitnet:/app/data
-      - ./config/kitnet:/app/config:ro
-      - /tmp/cardea-pcap:/pcap:ro
+      - ./data/zeek:/opt/zeek/logs
+      - ./services/kitnet/config:/app/config
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - KITNET_THRESHOLD=${KITNET_THRESHOLD:-0.95}

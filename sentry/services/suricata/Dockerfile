@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y \
 # Create directories
 RUN mkdir -p /var/log/suricata /etc/suricata/custom /app/scripts
 
-# Create suricata user if not exists
-RUN id -u suricata &>/dev/null || useradd -r -s /bin/false suricata
+# Create suricata user properly
+RUN groupadd -r suricata && useradd -r -g suricata -s /bin/false suricata
 
 # Copy configuration
 COPY config/ /etc/suricata/custom/

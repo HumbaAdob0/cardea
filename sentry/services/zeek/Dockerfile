@@ -25,12 +25,16 @@ RUN apt-get update && apt-get install -y zeek && rm -rf /var/lib/apt/lists/*
 # Create directories
 RUN mkdir -p /opt/zeek/logs /opt/zeek/etc /opt/zeek/scripts
 
-# Copy configuration and scripts
+# Copy configuration
 COPY config/ /opt/zeek/etc/
+COPY entrypoint.sh /opt/zeek/
+RUN chmod +x /opt/zeek/entrypoint.sh
+
+# Copy scripts directory
 COPY scripts/ /opt/zeek/scripts/
 
 # Create zeek user
-RUN useradd -r -s /bin/false zeek
+RUN useradd -r -g zeek -s /bin/false zeek
 RUN chown -R zeek:zeek /opt/zeek
 
 # Environment variables
