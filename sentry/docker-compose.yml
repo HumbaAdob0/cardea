@@ -1,5 +1,6 @@
 # Sentry Development Environment
 # Docker Compose configuration for local edge layer development
+# Optimized for Consumer UI Development and WLAN Sniffing
 
 services:
   zeek:
@@ -45,6 +46,8 @@ services:
 
   kitnet:
     user: "root"
+    # FIX: Host mode allows KitNET to directly access your ThinkPad's wlan0 interface
+    network_mode: "host" 
     build:
       context: ./services/kitnet
       dockerfile: Dockerfile
@@ -55,10 +58,10 @@ services:
       - ./services/kitnet/config:/app/config
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - KITNET_INTERFACE=wlan0
       - KITNET_THRESHOLD=${KITNET_THRESHOLD:-0.95}
-      - BRIDGE_URL=http://cardea-bridge:8001
-    networks:
-      - sentry-network
+      # In host mode, we use localhost to reach the bridge's mapped port
+      - BRIDGE_URL=http://localhost:8001/alerts
     restart: unless-stopped
     depends_on:
       - bridge
@@ -71,8 +74,12 @@ services:
     ports:
       - "8001:8001"
     volumes:
+      # Bind mount ensures local code/HTML changes sync to the container instantly
+      - ./bridge:/app 
       - ./data/bridge:/app/data
       - ./config/bridge:/app/config:ro
+    # FIX: Updated path and added --reload-dir to watch your new consumer HTML templates
+    command: uvicorn src.bridge_service:app --host 0.0.0.0 --port 8001 --reload --reload-dir src/templates
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ORACLE_WEBHOOK_URL=${ORACLE_WEBHOOK_URL:-http://cardea-oracle:8000/api/alerts}
@@ -95,7 +102,7 @@ services:
 
 networks:
   sentry-network:
-    name: sentry_shared_network # Global name to prevent project prefixing
+    name: sentry_shared_network 
     driver: bridge
 
 volumes:

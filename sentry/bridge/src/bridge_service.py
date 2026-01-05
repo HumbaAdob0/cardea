@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Cardea Bridge Service - Service Orchestration and API Gateway
-Modified to include Tactical UI for Sentry Node X230-ARCH
+Optimized for X230-ARCH with Dynamic Asset Discovery
 """
 
 import asyncio
@@ -130,7 +130,6 @@ async def escalate_to_oracle(alert_data: Dict[str, Any]):
     oracle_url = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000/api/alerts")
     
     async with httpx.AsyncClient() as client:
-        # MAP Sentry 'event_type' to Oracle 'alert_type' to avoid 422 errors
         payload = {
             "source": alert_data["source"],
             "alert_type": alert_data["event_type"],
@@ -143,7 +142,6 @@ async def escalate_to_oracle(alert_data: Dict[str, Any]):
         try:
             response = await client.post(oracle_url, json=payload, timeout=5.0)
             logger.info(f"☁️ Oracle Cloud Escalation: {response.status_code}")
-            # Update local tactical stats
             bridge_service.local_stats["escalations"] += 1
         except Exception as e:
             logger.error(f"❌ Oracle Cloud Unreachable: {e}")
@@ -158,7 +156,6 @@ class BridgeService:
         self.alerts: List[Alert] = []
         self.services_status: Dict[str, Dict[str, Any]] = {}
         
-        # Tactical UI Stats
         self.local_stats = {
             "anomaly_score": 0.0,
             "packets_sec": 0,
@@ -170,7 +167,7 @@ class BridgeService:
             "zeek": Path("/opt/zeek/logs"),
             "suricata": Path("/var/log/suricata"),
             "kitnet": Path("/opt/kitnet/data"),
-            "bridge": Path("/opt/bridge/data")
+            "bridge": Path("/app/data")
         }
         self._setup_data_paths()
         
@@ -200,10 +197,54 @@ class BridgeService:
             confidence=req.confidence
         )
         self.alerts.append(alert)
-        # Update UI score if available in raw_data
         if "score" in req.raw_data:
             self.local_stats["anomaly_score"] = req.raw_data["score"]
         return alert
+
+    async def get_network_discovery(self) -> Dict[str, Any]:
+        """Dynamically scans local logs and health to build the map data"""
+        devices = []
+        links = []
+        
+        # Sentry Gateway
+        sentry_status = "online" # Placeholder for live check
+        devices.append({
+            "id": "sentry", "name": "X230-ARCH [GATEWAY]", 
+            "role": "sentry", "status": sentry_status, "ip": "192.168.1.1"
+        })
+
+        # Oracle Link
+        devices.append({
+            "id": "oracle", "name": "AZURE-ORACLE", 
+            "role": "cloud", "status": "online", "ip": "Cloud Endpoint"
+        })
+        links.append({"source": "oracle", "target": "sentry", "active": True})
+
+        # Discover Assets from Zeek conn.log
+        try:
+            zeek_log = self.data_paths["zeek"] / "conn.log"
+            if zeek_log.exists():
+                async with aiofiles.open(zeek_log, mode='r') as f:
+                    content = await f.read()
+                    lines = content.splitlines()
+                    discovered_ips = set()
+                    for line in lines[-50:]:
+                        if not line.startswith('#'):
+                            parts = line.split('\t')
+                            if len(parts) > 4:
+                                discovered_ips.add(parts[4])
+                    
+                    for idx, ip in enumerate(list(discovered_ips)[:5]):
+                        dev_id = f"dev-{idx}"
+                        devices.append({
+                            "id": dev_id, "name": f"Device-{idx}", 
+                            "role": "asset", "category": "pc", "status": "online", "ip": ip
+                        })
+                        links.append({"source": "sentry", "target": dev_id, "active": False})
+        except Exception as e:
+            logger.error(f"Discovery scan failed: {e}")
+
+        return {"devices": devices, "links": links}
 
 bridge_service = BridgeService()
 
@@ -226,7 +267,6 @@ app.add_middleware(
 
 @app.get("/", response_class=HTMLResponse)
 async def tactical_dashboard(request: Request):
-    """Serves the Tactical UI for local monitoring"""
     return templates.TemplateResponse("index.html", {
         "request": request, 
         "stats": bridge_service.local_stats,
@@ -247,13 +287,23 @@ async def health_check():
 async def submit_alert(alert_request: AlertRequest, background_tasks: BackgroundTasks):
     try:
         alert = bridge_service.add_alert(alert_request)
-        # 1. Background task for local storage/analysis
-        # 2. ESCALATE to Cloud Oracle
         background_tasks.add_task(escalate_to_oracle, alert_request.model_dump())
         return {"status": "accepted", "alert_id": alert.id}
     except Exception as e:
         logger.error(f"Alert injection failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/discovery")
+async def discovery_endpoint():
+    """Provides dynamic data for the React NetworkMap"""
+    return await bridge_service.get_network_discovery()
+
+@app.post("/api/update_score")
+async def update_score(data: dict):
+    """Fixes KitNET 404 by providing the endpoint it's targeting"""
+    score = data.get("score", 0.0)
+    bridge_service.local_stats["anomaly_score"] = score
+    return {"status": "ok"}
 
 @app.get("/alerts")
 async def get_alerts(limit: int = 100):
@@ -261,7 +311,6 @@ async def get_alerts(limit: int = 100):
 
 @app.get("/api/local-stats")
 async def get_local_stats():
-    """Endpoint for the UI to poll for real-time updates"""
     return bridge_service.local_stats
 
 if __name__ == "__main__":
