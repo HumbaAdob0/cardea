@@ -5,7 +5,7 @@ JWT-based authentication system with role-based access control
 
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -38,9 +38,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
@@ -70,10 +70,11 @@ def verify_token(token: str) -> TokenData:
 async def get_user(username: str) -> Optional[User]:
     """Get user from database"""
     try:
+        from sqlalchemy import text
         async with get_db() as db:
             result = await db.execute(
-                "SELECT * FROM users WHERE username = %s AND is_active = true",
-                (username,)
+                text("SELECT * FROM users WHERE username = :username AND is_active = true"),
+                {"username": username}
             )
             user_data = result.fetchone()
             
@@ -94,18 +95,19 @@ async def get_user(username: str) -> Optional[User]:
 async def authenticate_user(username: str, password: str) -> Optional[User]:
     """Authenticate user credentials"""
     try:
+        from sqlalchemy import text
         async with get_db() as db:
             result = await db.execute(
-                "SELECT * FROM users WHERE username = %s AND is_active = true",
-                (username,)
+                text("SELECT * FROM users WHERE username = :username AND is_active = true"),
+                {"username": username}
             )
             user_data = result.fetchone()
             
             if user_data and verify_password(password, user_data.hashed_password):
                 # Update last login
                 await db.execute(
-                    "UPDATE users SET last_login = %s WHERE username = %s",
-                    (datetime.utcnow(), username)
+                    text("UPDATE users SET last_login = :last_login WHERE username = :username"),
+                    {"last_login": datetime.now(timezone.utc), "username": username}
                 )
                 await db.commit()
                 

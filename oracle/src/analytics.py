@@ -320,15 +320,18 @@ Respond in JSON format:
     async def _calculate_historical_score(self, alert: Alert) -> float:
         """Calculate score based on historical alert patterns"""
         try:
+            from sqlalchemy import text, select, func
             async with get_db() as db:
                 # Look for similar alerts in the last 24 hours
                 time_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
                 
-                similar_alerts = await db.execute(
-                    "SELECT COUNT(*) FROM alerts WHERE alert_type = %s AND timestamp > %s",
-                    (alert.alert_type, time_threshold)
+                # Use SQLAlchemy ORM query instead of raw SQL
+                stmt = select(func.count()).select_from(Alert).where(
+                    Alert.alert_type == alert.alert_type,
+                    Alert.timestamp > time_threshold
                 )
-                count = similar_alerts.scalar() or 0
+                result = await db.execute(stmt)
+                count = result.scalar() or 0
                 
                 # Higher frequency = higher score
                 if count > 10:
@@ -393,26 +396,27 @@ Respond in JSON format:
         """
         
         try:
+            from sqlalchemy import select, and_
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(seconds=time_window)
             
             async with get_db() as db:
-                # Build query filters
-                filters = ["timestamp >= %s AND timestamp <= %s"]
-                params = [start_time, end_time]
+                # Build SQLAlchemy query with proper ORM filters
+                conditions = [
+                    Alert.timestamp >= start_time,
+                    Alert.timestamp <= end_time
+                ]
                 
                 if threat_types:
-                    filters.append(f"alert_type IN ({','.join(['%s'] * len(threat_types))})")
-                    params.extend([t.value for t in threat_types])
+                    conditions.append(Alert.alert_type.in_([t.value for t in threat_types]))
                 
                 if severity_filter:
-                    filters.append("severity = %s")
-                    params.append(severity_filter.value)
+                    conditions.append(Alert.severity == severity_filter.value)
                 
-                # Get alerts for analysis
-                query = f"SELECT * FROM alerts WHERE {' AND '.join(filters)}"
-                result = await db.execute(query, params)
-                alerts = result.fetchall()
+                # Execute ORM query
+                stmt = select(Alert).where(and_(*conditions))
+                result = await db.execute(stmt)
+                alerts = result.scalars().all()
                 
                 # Analyze threats
                 threats_detected = []
@@ -800,132 +804,6 @@ Use clear, direct language suitable for a small business owner without cybersecu
         
         return recommendations
 
-class AlertCorrelator:
-    """Alert correlation and relationship detection"""
-    
-    def __init__(self):
-        self.correlation_algorithms = {
-            "temporal": self._temporal_correlation,
-            "network": self._network_correlation,
-            "behavioral": self._behavioral_correlation
-        }
-    
-    async def find_correlations(self, alert: Alert) -> List[Dict[str, Any]]:
-        """Find correlations for a given alert"""
-        correlations = []
-        
-        try:
-            for correlation_type, algorithm in self.correlation_algorithms.items():
-                related_alerts = await algorithm(alert)
-                for related_alert, score in related_alerts:
-                    correlations.append({
-                        "type": correlation_type,
-                        "related_alert_id": related_alert.id,
-                        "correlation_score": score,
-                        "reason": f"{correlation_type} correlation detected"
-                    })
-        
-        except Exception as e:
-            logger.error(f"Correlation analysis failed for alert {alert.id}: {e}")
-        
-        return correlations
-    
-    async def _temporal_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
-        """Find temporally correlated alerts"""
-        correlations = []
-        
-        try:
-            # Look for alerts within ±30 minutes
-            time_window = timedelta(minutes=30)
-            start_time = alert.timestamp - time_window
-            end_time = alert.timestamp + time_window
-            
-            async with get_db() as db:
-                result = await db.execute(
-                    "SELECT * FROM alerts WHERE timestamp BETWEEN %s AND %s AND id != %s",
-                    (start_time, end_time, alert.id)
-                )
-                nearby_alerts = result.fetchall()
-                
-                for nearby_alert in nearby_alerts:
-                    # Calculate temporal correlation score
-                    time_diff = abs((alert.timestamp - nearby_alert.timestamp).total_seconds())
-                    score = max(0.0, 1.0 - (time_diff / 1800))  # 30 minutes = 0 score
-                    
-                    if score > 0.5:  # Threshold for correlation
-                        correlations.append((nearby_alert, score))
-        
-        except Exception as e:
-            logger.warning(f"Temporal correlation failed: {e}")
-        
-        return correlations
-    
-    async def _network_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
-        """Find network-based correlations"""
-        correlations = []
-        
-        try:
-            if not alert.network_context:
-                return correlations
-            
-            source_ip = alert.network_context.get("source_ip")
-            dest_ip = alert.network_context.get("dest_ip")
-            
-            if source_ip or dest_ip:
-                async with get_db() as db:
-                    # Find alerts with same IP addresses
-                    result = await db.execute(
-                        """
-                        SELECT * FROM alerts 
-                        WHERE id != %s AND (
-                            network_context->>'source_ip' = %s OR
-                            network_context->>'dest_ip' = %s OR
-                            network_context->>'source_ip' = %s OR
-                            network_context->>'dest_ip' = %s
-                        )
-                        """,
-                        (alert.id, source_ip, dest_ip, dest_ip, source_ip)
-                    )
-                    related_alerts = result.fetchall()
-                    
-                    for related_alert in related_alerts:
-                        # Calculate network correlation score
-                        score = 0.8  # High score for IP matches
-                        correlations.append((related_alert, score))
-        
-        except Exception as e:
-            logger.warning(f"Network correlation failed: {e}")
-        
-        return correlations
-    
-    async def _behavioral_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
-        """Find behavioral pattern correlations"""
-        correlations = []
-        
-        try:
-            # Look for similar alert types from same source
-            async with get_db() as db:
-                result = await db.execute(
-                    "SELECT * FROM alerts WHERE alert_type = %s AND source = %s AND id != %s",
-                    (alert.alert_type, alert.source, alert.id)
-                )
-                similar_alerts = result.fetchall()
-                
-                for similar_alert in similar_alerts:
-                    # Calculate behavioral correlation score based on similarity
-                    score = 0.6  # Moderate score for same type/source
-                    
-                    # Increase score if similar severity
-                    if similar_alert.severity == alert.severity:
-                        score += 0.2
-                    
-                    correlations.append((similar_alert, score))
-        
-        except Exception as e:
-            logger.warning(f"Behavioral correlation failed: {e}")
-        
-        return correlations
-    
     async def index_threat_for_rag(self, alert: Alert, threat_score: float, ai_analysis: Optional[Dict] = None) -> bool:
         """
         Index analyzed threat into Azure Search for future RAG queries
@@ -938,7 +816,7 @@ class AlertCorrelator:
         Returns:
             True if successfully indexed, False otherwise
         """
-        if not self.search_service.search_client:
+        if not self.search_service or not self.search_service.search_client:
             logger.debug("Search service not available, skipping indexing")
             return False
         
@@ -975,3 +853,146 @@ class AlertCorrelator:
         except Exception as e:
             logger.error(f"Error indexing threat for RAG: {e}")
             return False
+
+
+class AlertCorrelator:
+    """Alert correlation and relationship detection"""
+    
+    def __init__(self):
+        self.correlation_algorithms = {
+            "temporal": self._temporal_correlation,
+            "network": self._network_correlation,
+            "behavioral": self._behavioral_correlation
+        }
+    
+    async def find_correlations(self, alert: Alert) -> List[Dict[str, Any]]:
+        """Find correlations for a given alert"""
+        correlations = []
+        
+        try:
+            for correlation_type, algorithm in self.correlation_algorithms.items():
+                related_alerts = await algorithm(alert)
+                for related_alert, score in related_alerts:
+                    correlations.append({
+                        "type": correlation_type,
+                        "related_alert_id": related_alert.id,
+                        "correlation_score": score,
+                        "reason": f"{correlation_type} correlation detected"
+                    })
+        
+        except Exception as e:
+            logger.error(f"Correlation analysis failed for alert {alert.id}: {e}")
+        
+        return correlations
+    
+    async def _temporal_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
+        """Find temporally correlated alerts"""
+        from sqlalchemy import select, and_
+        correlations = []
+        
+        try:
+            # Look for alerts within ±30 minutes
+            time_window = timedelta(minutes=30)
+            start_time = alert.timestamp - time_window
+            end_time = alert.timestamp + time_window
+            
+            async with get_db() as db:
+                stmt = select(Alert).where(
+                    and_(
+                        Alert.timestamp >= start_time,
+                        Alert.timestamp <= end_time,
+                        Alert.id != alert.id
+                    )
+                )
+                result = await db.execute(stmt)
+                nearby_alerts = result.scalars().all()
+                
+                for nearby_alert in nearby_alerts:
+                    # Calculate temporal correlation score
+                    time_diff = abs((alert.timestamp - nearby_alert.timestamp).total_seconds())
+                    score = max(0.0, 1.0 - (time_diff / 1800))  # 30 minutes = 0 score
+                    
+                    if score > 0.5:  # Threshold for correlation
+                        correlations.append((nearby_alert, score))
+        
+        except Exception as e:
+            logger.warning(f"Temporal correlation failed: {e}")
+        
+        return correlations
+    
+    async def _network_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
+        """Find network-based correlations"""
+        from sqlalchemy import select, or_, and_
+        from sqlalchemy.dialects.postgresql import JSONB
+        correlations = []
+        
+        try:
+            if not alert.network_context:
+                return correlations
+            
+            source_ip = alert.network_context.get("source_ip")
+            dest_ip = alert.network_context.get("dest_ip")
+            
+            if source_ip or dest_ip:
+                async with get_db() as db:
+                    # Build conditions for IP matching using SQLAlchemy JSON operators
+                    ip_conditions = []
+                    if source_ip:
+                        ip_conditions.append(Alert.network_context["source_ip"].astext == source_ip)
+                        ip_conditions.append(Alert.network_context["dest_ip"].astext == source_ip)
+                    if dest_ip:
+                        ip_conditions.append(Alert.network_context["source_ip"].astext == dest_ip)
+                        ip_conditions.append(Alert.network_context["dest_ip"].astext == dest_ip)
+                    
+                    stmt = select(Alert).where(
+                        and_(
+                            Alert.id != alert.id,
+                            or_(*ip_conditions)
+                        )
+                    )
+                    result = await db.execute(stmt)
+                    related_alerts = result.scalars().all()
+                    
+                    for related_alert in related_alerts:
+                        # Calculate network correlation score
+                        score = 0.8  # High score for IP matches
+                        correlations.append((related_alert, score))
+        
+        except Exception as e:
+            logger.warning(f"Network correlation failed: {e}")
+        
+        return correlations
+    
+    async def _behavioral_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
+        """Find behavioral pattern correlations"""
+        from sqlalchemy import select, and_
+        correlations = []
+        
+        try:
+            # Look for similar alert types from same source
+            async with get_db() as db:
+                stmt = select(Alert).where(
+                    and_(
+                        Alert.alert_type == alert.alert_type,
+                        Alert.source == alert.source,
+                        Alert.id != alert.id
+                    )
+                ).limit(20)  # Limit to prevent excessive correlations
+                result = await db.execute(stmt)
+                similar_alerts = result.scalars().all()
+                
+                for similar_alert in similar_alerts:
+                    # Calculate behavioral correlation score based on similarity
+                    score = 0.6  # Moderate score for same type/source
+                    
+                    # Increase score if similar severity
+                    if similar_alert.severity == alert.severity:
+                        score += 0.2
+                    
+                    correlations.append((similar_alert, score))
+        
+        except Exception as e:
+            logger.warning(f"Behavioral correlation failed: {e}")
+        
+        return correlations
+

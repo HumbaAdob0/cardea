@@ -73,11 +73,13 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         version=settings.VERSION,
         description="Cloud-native security analytics with AI Credit Protection",
+        debug=settings.get_effective_debug(),
     )
     
+    # Configure CORS based on environment
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -230,6 +232,21 @@ async def calculate_analytics(db, time_range: str) -> Dict[str, Any]:
     result = await db.execute(stmt)
     alerts_list = result.scalars().all()
     
+    # Serialize alerts for JSON response (Dashboard compatibility)
+    serialized_alerts = []
+    for alert in alerts_list:
+        serialized_alerts.append({
+            "id": alert.id,
+            "source": alert.source,
+            "alert_type": alert.alert_type,
+            "severity": alert.severity,
+            "title": alert.title,
+            "description": alert.description,
+            "timestamp": alert.timestamp.isoformat() if alert.timestamp else None,
+            "threat_score": alert.threat_score,
+            "raw_data": alert.raw_data,
+        })
+    
     count_stmt = select(func.count()).select_from(Alert)
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
@@ -245,7 +262,7 @@ async def calculate_analytics(db, time_range: str) -> Dict[str, Any]:
     return {
         "total_alerts": total,
         "risk_score": float(avg_risk),
-        "alerts": alerts_list,
+        "alerts": serialized_alerts,
         "severity_stats": severity_map
     }
 

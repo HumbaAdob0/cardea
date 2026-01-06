@@ -106,13 +106,15 @@ class ThreatAnalysisResponse(BaseModel):
     processing_time_ms: int
 
 class AnalyticsResponse(BaseModel):
-    """Analytics data response"""
+    """Analytics data response - aligned with Dashboard frontend types"""
     time_range: str
     total_alerts: int
-    alerts_by_severity: Dict[str, int]
-    alerts_by_type: Dict[str, int]
-    top_threats: List[ThreatInfo]
-    trend_data: List[Dict[str, Any]]
+    risk_score: float = Field(ge=0.0, le=1.0, default=0.0, description="Overall risk score")
+    alerts: List[Dict[str, Any]] = Field(default_factory=list, description="List of recent alerts")
+    alerts_by_severity: Dict[str, int] = Field(default_factory=dict)
+    alerts_by_type: Dict[str, int] = Field(default_factory=dict)
+    top_threats: List[ThreatInfo] = Field(default_factory=list)
+    trend_data: List[Dict[str, Any]] = Field(default_factory=list)
     generated_at: datetime
 
 class WebhookAlert(BaseModel):
