@@ -83,7 +83,7 @@ def get_eve_stats() -> dict[str, Any]:
             try:
                 f.seek(-100000, 2)
                 f.readline()  # Skip partial line
-            except:
+            except OSError:
                 f.seek(0)
             
             for line in f:
@@ -103,7 +103,7 @@ def get_eve_stats() -> dict[str, Any]:
                             event_date = datetime.fromisoformat(timestamp.replace('Z', '+00:00')).date()
                             if event_date == today:
                                 stats["alerts_today"] += 1
-                        except:
+                        except (ValueError, TypeError):
                             pass
                             
                 except json.JSONDecodeError:

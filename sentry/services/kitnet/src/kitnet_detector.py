@@ -668,7 +668,7 @@ class KitNETDetector:
                 1.0 if 9 <= dt.hour <= 17 else 0.0,  # Business hours
                 1.0 if 0 <= dt.hour <= 6 else 0.0,   # Night time
             ]
-        except:
+        except (ValueError, TypeError, AttributeError):
             return [0.0] * 6
     
     def _calculate_entropy(self, text: str) -> float:

@@ -129,7 +129,8 @@ def test_kitnet_service():
         sys.path.insert(0, str(Path("/workspaces/cardea/sentry/services/kitnet/src").absolute()))
         from network_monitor import NetworkMonitor
         
-        monitor = NetworkMonitor(bridge_url="http://localhost:8080")
+        # NetworkMonitor takes no arguments in __init__
+        monitor = NetworkMonitor()
         print("  ✅ KitNET NetworkMonitor can be instantiated")
         return True
         

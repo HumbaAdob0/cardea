@@ -94,7 +94,7 @@ def check_memory():
             "max_memory_mb": max_mem_mb,
             "healthy": healthy
         }
-    except:
+    except Exception:
         return {"memory_check": "unavailable", "healthy": True}
 
 def main():

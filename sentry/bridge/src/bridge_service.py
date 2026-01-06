@@ -517,7 +517,10 @@ async def submit_suricata_alert(alert_request: SuricataAlertRequest, background_
         if severity in ("critical", "high"):
             background_tasks.add_task(escalate_to_oracle, normalized.model_dump())
         
-        logger.info(f"🛡️ Suricata alert: {signature[:50]}... [{severity}]")
+        # Sanitize log output to prevent log injection
+        safe_signature = signature[:50].replace('\n', ' ').replace('\r', ' ')
+        safe_severity = severity.replace('\n', ' ').replace('\r', ' ')
+        logger.info(f"🛡️ Suricata alert: {safe_signature}... [{safe_severity}]")
         return {"status": "accepted", "alert_id": alert.id, "mitre": mitre_technique}
         
     except Exception as e:
@@ -558,7 +561,9 @@ async def receive_kitnet_stats(data: dict):
     global kitnet_stats
     kitnet_stats.update(data)
     kitnet_stats["last_report"] = datetime.now().isoformat()
-    logger.debug(f"🤖 KitNET stats updated: {data.get('total_processed', 0)} processed")
+    # Sanitize log output - only log numeric value to prevent log injection
+    total_processed = int(data.get('total_processed', 0)) if isinstance(data.get('total_processed'), (int, float)) else 0
+    logger.debug(f"🤖 KitNET stats updated: {total_processed} processed")
     return {"status": "ok"}
 
 @app.get("/api/kitnet-stats")

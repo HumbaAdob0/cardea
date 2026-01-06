@@ -234,7 +234,11 @@ async def create_default_admin():
                     roles=["admin", "user"]
                 )
                 
-                logger.warning(f"Created default admin user with password: {admin_password}")
+                # Log creation without exposing the password
+                if os.getenv("ADMIN_PASSWORD"):
+                    logger.info("Created default admin user with password from ADMIN_PASSWORD env var")
+                else:
+                    logger.warning("Created default admin user with auto-generated password. Set ADMIN_PASSWORD env var to specify.")
                 logger.warning("Please change the admin password immediately!")
                 
     except Exception as e:

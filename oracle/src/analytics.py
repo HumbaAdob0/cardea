@@ -247,8 +247,6 @@ Respond in JSON format:
     
     async def _calculate_threat_score_deterministic(self, alert: Alert) -> float:
         """Fallback deterministic threat scoring (original algorithm)"""
-        base_score = 0.0
-        
         # Base score from severity and type
         severity_score = self.severity_weights.get(AlertSeverity(alert.severity), 0.5)
         type_score = self.alert_type_weights.get(AlertType(alert.alert_type), 0.5)
