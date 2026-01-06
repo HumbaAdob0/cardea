@@ -3,6 +3,7 @@ Oracle Backend FastAPI Service - Optimized for Azure AI & Credit Protection
 Includes Redis-based De-duplication and Rate Limiting
 """
 
+import os
 import logging
 import hashlib
 from datetime import datetime, timezone, timedelta
@@ -20,6 +21,17 @@ from models import (
     ThreatAnalysisResponse, SystemStatus, AnalyticsResponse
 )
 from analytics import ThreatAnalyzer, AlertCorrelator
+from fastapi import Depends, status, Body
+from models import User
+from auth import authenticate_user, create_access_token
+try:
+    from azure_auth import azure_auth_service
+    from google_auth import google_auth_service
+except ImportError:
+    logger.warning("OAuth modules not available")
+    azure_auth_service = None
+    google_auth_service = None
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +96,113 @@ def create_app() -> FastAPI:
     
     threat_analyzer = ThreatAnalyzer()
     alert_correlator = AlertCorrelator()
+    
+    # Login request model
+    class LoginRequest(BaseModel):
+        username: str
+        password: str
+    
+    # OAuth validation request model
+    class OAuthValidateRequest(BaseModel):
+        provider: str  # 'microsoft' or 'google'
+    
+    @app.post("/api/auth/login", response_model=dict)
+    async def login(login_data: LoginRequest):
+        """
+        Authenticate user with username/password and return JWT token
+        """
+        try:
+            user = await authenticate_user(login_data.username, login_data.password)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Incorrect username or password",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            # Create access token
+            access_token = create_access_token(
+                data={"sub": user.username, "scopes": user.roles}
+            )
+            
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {
+                    "username": user.username,
+                    "email": user.email,
+                    "full_name": user.full_name,
+                    "roles": user.roles
+                }
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Login error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error during login"
+            )
+    
+    @app.post("/api/auth/oauth/validate", response_model=dict)
+    async def validate_oauth(
+        oauth_data: OAuthValidateRequest,
+        authorization: str = Depends(lambda x: x.headers.get("authorization", ""))
+    ):
+        """
+        Validate OAuth token from Microsoft or Google and return user info
+        Frontend sends the token in Authorization header: Bearer <token>
+        """
+        try:
+            # Extract token from Authorization header
+            if not authorization.startswith("Bearer "):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authorization header format",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            token = authorization.replace("Bearer ", "")
+            provider = oauth_data.provider.lower()
+            
+            # Validate token based on provider
+            user_info = None
+            if provider == "microsoft" and azure_auth_service:
+                user_info = azure_auth_service.validate_token(token)
+            elif provider == "google" and google_auth_service:
+                user_info = google_auth_service.validate_token(token)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported or unavailable OAuth provider: {provider}"
+                )
+            
+            if not user_info:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token validation failed",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            # Return validated user info
+            return {
+                "status": "valid",
+                "provider": provider,
+                "user": {
+                    "user_id": user_info.get("user_id"),
+                    "email": user_info.get("email"),
+                    "name": user_info.get("name"),
+                }
+            }
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"OAuth validation error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error during OAuth validation"
+            )
     
     @app.get("/health", response_model=HealthResponse)
     async def health_check():

@@ -8,6 +8,10 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file BEFORE any other imports
+load_dotenv()
 
 import uvicorn
 from fastapi import FastAPI

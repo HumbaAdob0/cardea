@@ -1,12 +1,13 @@
 """
 Authentication and Authorization
 JWT-based authentication system with role-based access control
+Supports both traditional username/password and OAuth 2.0 (Microsoft, Google)
 """
 
 import os
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
@@ -16,6 +17,21 @@ import secrets
 from models import User, Token, TokenData
 from database import get_db
 from config import settings
+
+# Import OAuth authentication services
+try:
+    from azure_auth import azure_auth_service
+    AZURE_AUTH_AVAILABLE = True
+except ImportError:
+    AZURE_AUTH_AVAILABLE = False
+    logger.warning("Azure authentication module not available")
+
+try:
+    from google_auth import google_auth_service
+    GOOGLE_AUTH_AVAILABLE = True
+except ImportError:
+    GOOGLE_AUTH_AVAILABLE = False
+    logger.warning("Google authentication module not available")
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +139,207 @@ async def authenticate_user(username: str, password: str) -> Optional[User]:
         return None
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """
+    Get current authenticated user from JWT token or OAuth token
+    Supports both traditional JWT and OAuth 2.0 tokens (Microsoft, Google)
+    """
+    token = credentials.credentials
+    
+    # Try traditional JWT verification first
+    try:
+        token_data = verify_token(token)
+        user = await get_user(username=token_data.username)
+        
+        if user:
+            return user
+    except:
+        pass  # If JWT fails, try OAuth tokens
+    
+    # Try Microsoft Azure AD token validation
+    if AZURE_AUTH_AVAILABLE and azure_auth_service.is_enabled():
+        try:
+            user_info = azure_auth_service.validate_token(token)
+            if user_info:
+                # Get or create user from OAuth info
+                user = await get_or_create_oauth_user(user_info)
+                if user:
+                    return user
+        except HTTPException:
+            pass  # Try next method
+        except Exception as e:
+            logger.debug(f"Azure token validation failed: {e}")
+    
+    # Try Google OAuth token validation
+    if GOOGLE_AUTH_AVAILABLE and google_auth_service.is_enabled():
+        try:
+            user_info = google_auth_service.validate_token(token)
+            if user_info:
+                # Get or create user from OAuth info
+                user = await get_or_create_oauth_user(user_info)
+                if user:
+                    return user
+        except HTTPException:
+            pass  # All methods failed
+        except Exception as e:
+            logger.debug(f"Google token validation failed: {e}")
+    
+    # All authentication methods failed
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def get_or_create_oauth_user(oauth_info: Dict[str, Any]) -> Optional[User]:
+    """
+    Get existing user or create new user from OAuth provider information
+    
+    Args:
+        oauth_info: Dictionary containing user info from OAuth provider
+                   Must include: provider, user_id, email
+    
+    Returns:
+        User object or None if failed
+    """
+    try:
+        provider = oauth_info.get("provider")
+        oauth_id = oauth_info.get("user_id")
+        email = oauth_info.get("email")
+        name = oauth_info.get("name", "")
+        
+        if not all([provider, oauth_id, email]):
+            logger.error("Missing required OAuth user information")
+            return None
+        
+        async with get_db() as db:
+            # Try to find existing user by OAuth ID
+            result = await db.execute(
+                """
+                SELECT * FROM users 
+                WHERE oauth_provider = %s AND oauth_id = %s AND is_active = true
+                """,
+                (provider, oauth_id)
+            )
+            user_data = result.fetchone()
+            
+            # If not found, try by email
+            if not user_data:
+                result = await db.execute(
+                    """
+                    SELECT * FROM users 
+                    WHERE email = %s AND is_active = true
+                    """,
+                    (email,)
+                )
+                user_data = result.fetchone()
+                
+                # Update existing user with OAuth info
+                if user_data:
+                    await db.execute(
+                        """
+                        UPDATE users 
+                        SET oauth_provider = %s, oauth_id = %s, last_login = %s
+                        WHERE email = %s
+                        """,
+                        (provider, oauth_id, datetime.utcnow(), email)
+                    )
+                    await db.commit()
+            
+            # Create new user if doesn't exist
+            if not user_data:
+                username = email.split('@')[0] + f"_{provider}"
+                await db.execute(
+                    """
+                    INSERT INTO users 
+                    (username, email, full_name, oauth_provider, oauth_id, is_active, roles, last_login)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (username, email, name, provider, oauth_id, True, ["user"], datetime.utcnow())
+                )
+                await db.commit()
+                
+                logger.info(f"Created new user from {provider} OAuth: {email}")
+                
+                return User(
+                    username=username,
+                    email=email,
+                    full_name=name,
+                    is_active=True,
+                    roles=["user"]
+                )
+            else:
+                # Update last login
+                await db.execute(
+                    "UPDATE users SET last_login = %s WHERE username = %s",
+                    (datetime.utcnow(), user_data.username)
+                )
+                await db.commit()
+                
+                return User(
+                    username=user_data.username,
+                    email=user_data.email,
+                    full_name=user_data.full_name,
+                    is_active=user_data.is_active,
+                    roles=user_data.roles or ["user"]
+                )
+                
+    except Exception as e:
+        logger.error(f"Failed to get/create OAuth user: {e}")
+        return None
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """
+    Get current authenticated user from JWT token or OAuth token
+    Supports both traditional JWT and OAuth 2.0 tokens (Microsoft, Google)
+    """
+    token = credentials.credentials
+    
+    # Try traditional JWT verification first
+    try:
+        token_data = verify_token(token)
+        user = await get_user(username=token_data.username)
+        
+        if user:
+            return user
+    except:
+        pass  # If JWT fails, try OAuth tokens
+    
+    # Try Microsoft Azure AD token validation
+    if AZURE_AUTH_AVAILABLE and azure_auth_service.is_enabled():
+        try:
+            user_info = azure_auth_service.validate_token(token)
+            if user_info:
+                # Get or create user from OAuth info
+                user = await get_or_create_oauth_user(user_info)
+                if user:
+                    return user
+        except HTTPException:
+            pass  # Try next method
+        except Exception as e:
+            logger.debug(f"Azure token validation failed: {e}")
+    
+    # Try Google OAuth token validation
+    if GOOGLE_AUTH_AVAILABLE and google_auth_service.is_enabled():
+        try:
+            user_info = google_auth_service.validate_token(token)
+            if user_info:
+                # Get or create user from OAuth info
+                user = await get_or_create_oauth_user(user_info)
+                if user:
+                    return user
+        except HTTPException:
+            pass  # All methods failed
+        except Exception as e:
+            logger.debug(f"Google token validation failed: {e}")
+    
+    # All authentication methods failed
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     """Get current authenticated user from JWT token"""
     try:
         token_data = verify_token(credentials.credentials)

@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     # Sentry Integration
     SENTRY_WEBHOOK_TOKEN: str = "sentry-webhook-token"
     
+    # Microsoft Entra External ID Configuration
+    AZURE_TENANT_ID: Optional[str] = None
+    AZURE_CLIENT_ID: Optional[str] = None
+    AZURE_CLIENT_SECRET: Optional[str] = None
+    AZURE_AUTHORITY: Optional[str] = None
+    
     # Alert Processing
     MAX_ALERTS_PER_BATCH: int = 100
     ALERT_RETENTION_DAYS: int = 90
