@@ -38,7 +38,7 @@ services:
       - ./data/suricata:/var/log/suricata
       - ./services/suricata/config:/etc/suricata/custom
     environment:
-      - SURICATA_INTERFACE=${SURICATA_INTERFACE:-eth0}
+      - SURICATA_INTERFACE=${SURICATA_INTERFACE:-auto}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     restart: unless-stopped
     depends_on:
