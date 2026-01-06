@@ -61,7 +61,7 @@ class ThreatAnalyzer:
         if self.search_service.search_client:
             logger.info("✅ Azure AI Search initialized for RAG-enhanced analysis")
     
-    def _load_threat_patterns(self) -> Dict[str, Any]:
+    def _load_threat_patterns(self) -> dict[str, Any]:
         """Load threat intelligence patterns"""
         # In production, this would load from threat intelligence feeds
         return {
@@ -74,7 +74,7 @@ class ThreatAnalyzer:
     async def reason_with_ai(
         self, 
         prompt: str, 
-        context: Dict[str, Any], 
+        context: dict[str, Any], 
         system_role: str = "You are a senior cybersecurity analyst specializing in threat intelligence and incident response."
     ) -> Optional[str]:
         """
@@ -386,9 +386,9 @@ Respond in JSON format:
     async def analyze_threats(
         self,
         time_window: int,
-        threat_types: List[AlertType] = None,
+        threat_types: list[AlertType] = None,
         severity_filter: AlertSeverity = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Comprehensive threat analysis with AI-powered insights
         Includes adaptive threshold recommendations for Sentry configuration
@@ -464,10 +464,10 @@ Respond in JSON format:
     
     async def _recommend_threshold_adjustment(
         self,
-        alerts: List[Alert],
-        threats: List[ThreatInfo],
+        alerts: list[Alert],
+        threats: list[ThreatInfo],
         time_window: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         AI-powered adaptive threshold recommendation for KitNET Sentry
         Analyzes alert patterns to suggest optimal detection sensitivity
@@ -564,10 +564,10 @@ Guidelines:
     
     def _recommend_threshold_deterministic(
         self,
-        alerts: List[Alert],
-        threats: List[ThreatInfo],
+        alerts: list[Alert],
+        threats: list[ThreatInfo],
         time_window: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Deterministic threshold recommendation based on heuristics"""
         total_alerts = len(alerts)
         alerts_per_hour = (total_alerts / time_window) * 3600 if time_window > 0 else 0
@@ -602,7 +602,7 @@ Guidelines:
             "ai_generated": False
         }
     
-    def _group_threats(self, alerts: List[Alert]) -> Dict[str, List[Alert]]:
+    def _group_threats(self, alerts: list[Alert]) -> dict[str, list[Alert]]:
         """Group related alerts into threat clusters"""
         groups = defaultdict(list)
         
@@ -613,7 +613,7 @@ Guidelines:
         
         return groups
     
-    async def _analyze_threat_group(self, alerts: List[Alert]) -> Optional[ThreatInfo]:
+    async def _analyze_threat_group(self, alerts: list[Alert]) -> Optional[ThreatInfo]:
         """Analyze a group of related alerts"""
         if not alerts:
             return None
@@ -647,7 +647,7 @@ Guidelines:
             logger.error(f"Threat group analysis failed: {e}")
             return None
     
-    def _calculate_overall_risk(self, threats: List[ThreatInfo]) -> float:
+    def _calculate_overall_risk(self, threats: list[ThreatInfo]) -> float:
         """Calculate overall risk score from detected threats"""
         if not threats:
             return 0.0
@@ -663,7 +663,7 @@ Guidelines:
         risk_score = total_risk / (1 + len(threats) * 0.1)
         return min(1.0, risk_score)
     
-    def _generate_recommendations(self, threats: List[ThreatInfo]) -> List[str]:
+    def _generate_recommendations(self, threats: list[ThreatInfo]) -> list[str]:
         """
         Generate AI-powered security recommendations
         Fallback to deterministic recommendations if AI unavailable
@@ -679,7 +679,7 @@ Guidelines:
         
         return self._generate_recommendations_deterministic(threats)
     
-    async def _generate_recommendations_ai(self, threats: List[ThreatInfo]) -> List[str]:
+    async def _generate_recommendations_ai(self, threats: list[ThreatInfo]) -> list[str]:
         """AI-powered recommendations with adaptive threshold suggestions"""
         try:
             # Prepare threat summary for AI
@@ -775,7 +775,7 @@ Use clear, direct language suitable for a small business owner without cybersecu
         # Fallback to deterministic
         return self._generate_recommendations_deterministic(threats)
     
-    def _generate_recommendations_deterministic(self, threats: List[ThreatInfo]) -> List[str]:
+    def _generate_recommendations_deterministic(self, threats: list[ThreatInfo]) -> list[str]:
         """Deterministic security recommendations (original algorithm)"""
         recommendations = []
         
