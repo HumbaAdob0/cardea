@@ -803,7 +803,7 @@ Use clear, direct language suitable for a small business owner without cybersecu
         
         return recommendations
 
-    async def index_threat_for_rag(self, alert: Alert, threat_score: float, ai_analysis: Optional[Dict] = None) -> bool:
+    async def index_threat_for_rag(self, alert: Alert, threat_score: float, ai_analysis: Optional[dict] = None) -> bool:
         """
         Index analyzed threat into Azure Search for future RAG queries
         
@@ -864,7 +864,7 @@ class AlertCorrelator:
             "behavioral": self._behavioral_correlation
         }
     
-    async def find_correlations(self, alert: Alert) -> List[Dict[str, Any]]:
+    async def find_correlations(self, alert: Alert) -> list[dict[str, Any]]:
         """Find correlations for a given alert"""
         correlations = []
         
@@ -884,7 +884,7 @@ class AlertCorrelator:
         
         return correlations
     
-    async def _temporal_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
+    async def _temporal_correlation(self, alert: Alert) -> list[tuple[Alert, float]]:
         """Find temporally correlated alerts"""
         from sqlalchemy import select, and_
         correlations = []
@@ -919,7 +919,7 @@ class AlertCorrelator:
         
         return correlations
     
-    async def _network_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
+    async def _network_correlation(self, alert: Alert) -> list[tuple[Alert, float]]:
         """Find network-based correlations"""
         from sqlalchemy import select, or_, and_
         from sqlalchemy.dialects.postgresql import JSONB
@@ -962,7 +962,7 @@ class AlertCorrelator:
         
         return correlations
     
-    async def _behavioral_correlation(self, alert: Alert) -> List[Tuple[Alert, float]]:
+    async def _behavioral_correlation(self, alert: Alert) -> list[tuple[Alert, float]]:
         """Find behavioral pattern correlations"""
         from sqlalchemy import select, and_
         correlations = []

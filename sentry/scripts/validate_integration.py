@@ -12,7 +12,7 @@ import json
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Tuple
+from typing import Any
 
 # ANSI color codes
 GREEN = "\033[92m"
@@ -29,7 +29,7 @@ class IntegrationValidator:
     """Validates the complete sentry integration"""
     
     def __init__(self):
-        self.results: List[Tuple[str, bool, str]] = []
+        self.results: list[tuple[str, bool, str]] = []
         self.session = None
     
     async def __aenter__(self):
@@ -58,7 +58,7 @@ class IntegrationValidator:
             self.log(f"❌ Bridge unreachable: {e}", "fail")
             return False
     
-    async def check_endpoints(self) -> Dict[str, bool]:
+    async def check_endpoints(self) -> dict[str, bool]:
         """Verify all required endpoints exist"""
         endpoints = [
             ("GET", "/health", "Bridge health"),
@@ -248,7 +248,7 @@ class IntegrationValidator:
             self.log(f"  ❌ Zeek log access check failed: {e}", "fail")
             return False
     
-    async def check_data_paths(self) -> Dict[str, bool]:
+    async def check_data_paths(self) -> dict[str, bool]:
         """Check if data directories exist and are accessible"""
         self.log(f"\n{BOLD}📂 Checking Data Paths:{RESET}")
         

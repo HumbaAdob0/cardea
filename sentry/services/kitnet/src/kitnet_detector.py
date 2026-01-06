@@ -18,7 +18,7 @@ import pickle
 import logging
 import math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Optional, Any
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import MiniBatchKMeans
 from datetime import datetime
@@ -74,7 +74,7 @@ class DampedStatistics:
             self.min_val = min(self.min_val, value)
             self.max_val = max(self.max_val, value)
     
-    def get_features(self) -> List[float]:
+    def get_features(self) -> list[float]:
         """Return all statistics as feature vector."""
         return [
             self.weight,
@@ -116,7 +116,7 @@ class StreamStatistics:
         
         self.last_timestamp = timestamp
     
-    def get_features(self) -> List[float]:
+    def get_features(self) -> list[float]:
         """Get all stream features."""
         features = []
         features.extend(self.pkt_size.get_features())
@@ -170,7 +170,7 @@ class Autoencoder:
         """Sigmoid derivative."""
         return x * (1 - x)
     
-    def forward(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def forward(self, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Forward pass."""
         hidden = self._sigmoid(np.dot(x, self.W_enc) + self.b_enc)
         output = self._sigmoid(np.dot(hidden, self.W_dec) + self.b_dec)
@@ -232,9 +232,9 @@ class FeatureMapper:
     def __init__(self, max_clusters: int = 10, min_cluster_size: int = 3):
         self.max_clusters = max_clusters
         self.min_cluster_size = min_cluster_size
-        self.feature_buffer: List[np.ndarray] = []
+        self.feature_buffer: list[np.ndarray] = []
         self.buffer_size = 2000  # Samples to collect before clustering
-        self.feature_groups: List[List[int]] = []
+        self.feature_groups: list[list[int]] = []
         self.is_ready = False
     
     def add_sample(self, features: np.ndarray) -> bool:
@@ -296,7 +296,7 @@ class FeatureMapper:
         
         logger.info(f"✅ Created {len(self.feature_groups)} feature groups: {[len(g) for g in self.feature_groups]}")
     
-    def get_groups(self) -> List[List[int]]:
+    def get_groups(self) -> list[list[int]]:
         """Get computed feature groups."""
         return self.feature_groups
 
@@ -329,7 +329,7 @@ class KitNETDetector:
         
         # Components
         self.feature_mapper = FeatureMapper()
-        self.autoencoders: List[Autoencoder] = []
+        self.autoencoders: list[Autoencoder] = []
         self.output_autoencoder: Optional[Autoencoder] = None
         self.scaler = StandardScaler()
         
@@ -339,8 +339,8 @@ class KitNETDetector:
         self.scaler_fitted = False
         
         # Stream statistics for hosts (damped incremental)
-        self.host_stats: Dict[str, StreamStatistics] = {}
-        self.pair_stats: Dict[str, StreamStatistics] = {}
+        self.host_stats: dict[str, StreamStatistics] = {}
+        self.pair_stats: dict[str, StreamStatistics] = {}
         self.max_stats_entries = 10000
         
         # Anomaly tracking
@@ -364,7 +364,7 @@ class KitNETDetector:
             logger.info("🧠 No model found - Starting training phase...")
             self.phase = "FM"
     
-    def extract_features(self, packet_data: Dict[str, Any]) -> np.ndarray:
+    def extract_features(self, packet_data: dict[str, Any]) -> np.ndarray:
         """
         Extract 50+ features from multi-log Zeek data.
         
@@ -655,7 +655,7 @@ class KitNETDetector:
         }
         return mapping.get(str(method).upper(), 0.0)
     
-    def _extract_time_features(self, timestamp_str: str) -> List[float]:
+    def _extract_time_features(self, timestamp_str: str) -> list[float]:
         """Extract time-based features."""
         try:
             ts = str(timestamp_str).replace('Z', '+00:00')
@@ -722,7 +722,7 @@ class KitNETDetector:
         
         logger.info(f"📂 Model loaded: {len(self.autoencoders)} AEs, threshold={self.adaptive_threshold:.4f}")
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get detector statistics."""
         return {
             **self.detection_stats,

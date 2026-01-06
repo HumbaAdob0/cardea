@@ -256,7 +256,7 @@ def create_app() -> FastAPI:
     
     return app
 
-async def generate_ai_insight(analytics_data: Dict[str, Any], threat_analyzer: ThreatAnalyzer):
+async def generate_ai_insight(analytics_data: dict[str, Any], threat_analyzer: ThreatAnalyzer):
     """Generate human-readable AI insight based on current threat data"""
     from models import AIInsight
     
@@ -420,7 +420,7 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
     except Exception as e:
         logger.error(f"Background processing failed for alert {alert_id}: {e}")
 
-async def calculate_analytics(db, time_range: str) -> Dict[str, Any]:
+async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
     stmt = select(Alert).order_by(Alert.timestamp.desc()).limit(50)
     result = await db.execute(stmt)
     alerts_list = result.scalars().all()

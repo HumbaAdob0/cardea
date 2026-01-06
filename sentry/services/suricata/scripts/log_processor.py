@@ -15,7 +15,7 @@ import time
 import os
 import requests
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Optional
 from datetime import datetime
 import logging
 from collections import deque
@@ -50,7 +50,7 @@ class SuricataLogProcessor:
         logger.info(f"   Bridge URL: {self.bridge_url}")
         logger.info(f"   EVE Log: {self.eve_log_path}")
 
-    def process_alert(self, event: Dict[str, Any]) -> bool:
+    def process_alert(self, event: dict[str, Any]) -> bool:
         """Process and forward a Suricata alert event to Bridge"""
         try:
             alert_info = event.get("alert", {})
@@ -149,7 +149,7 @@ class SuricataLogProcessor:
             self.stats["alerts_failed"] += 1
             return False
 
-    def process_event(self, event: Dict[str, Any]) -> None:
+    def process_event(self, event: dict[str, Any]) -> None:
         """Process any EVE event type"""
         event_type = event.get("event_type", "unknown")
         
@@ -248,7 +248,7 @@ class SuricataLogProcessor:
                 logger.error(f"Error tailing log file: {e}")
                 time.sleep(5)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return processor statistics"""
         return {
             **self.stats,

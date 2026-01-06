@@ -21,7 +21,7 @@ import logging
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable
+from typing import Any, Optional, Callable
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ class ZeekNotice:
     note: str  # e.g., "Scan::Port_Scan"
     msg: str   # Human-readable message
     sub: Optional[str]  # Additional details
-    actions: List[str]
-    raw: Dict[str, Any]
+    actions: list[str]
+    raw: dict[str, Any]
     
     @property
     def category(self) -> str:
@@ -135,14 +135,14 @@ class ZeekNoticeMonitor:
         
         Args:
             alert_callback: Async function to call when notices are detected.
-                           Signature: async def callback(alert_data: Dict[str, Any])
+                           Signature: async def callback(alert_data: dict[str, Any])
         """
         self.alert_callback = alert_callback
         self.is_running = False
         self.last_position = 0
         self.notice_log_path: Optional[Path] = None
         self.notices_processed = 0
-        self.notices_by_type: Dict[str, int] = {}
+        self.notices_by_type: dict[str, int] = {}
         
     def _find_notice_log(self) -> Optional[Path]:
         """Locate the Zeek notice.log file."""
@@ -224,7 +224,7 @@ class ZeekNoticeMonitor:
         # Fallback to TSV
         return self._parse_tsv_notice(line)
     
-    def _parse_json_notice(self, data: Dict[str, Any]) -> ZeekNotice:
+    def _parse_json_notice(self, data: dict[str, Any]) -> ZeekNotice:
         """Parse JSON format notice."""
         return ZeekNotice(
             timestamp=data.get('ts', datetime.now(timezone.utc).isoformat()),
@@ -309,7 +309,7 @@ class ZeekNoticeMonitor:
             except Exception as e:
                 logger.error(f"Alert callback failed: {e}")
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return monitoring statistics."""
         return {
             'notices_processed': self.notices_processed,

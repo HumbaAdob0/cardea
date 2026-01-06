@@ -13,7 +13,7 @@ This module consumes multiple Zeek log types to provide rich feature extraction:
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Optional
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -27,12 +27,12 @@ logger = logging.getLogger(__name__)
 class ConnectionContext:
     """Enriched connection context from multiple Zeek logs"""
     uid: str
-    conn_data: Dict[str, Any] = field(default_factory=dict)
-    dns_queries: List[Dict[str, Any]] = field(default_factory=list)
-    http_requests: List[Dict[str, Any]] = field(default_factory=list)
-    ssl_info: Dict[str, Any] = field(default_factory=dict)
-    notices: List[Dict[str, Any]] = field(default_factory=list)
-    files: List[Dict[str, Any]] = field(default_factory=list)
+    conn_data: dict[str, Any] = field(default_factory=dict)
+    dns_queries: list[dict[str, Any]] = field(default_factory=list)
+    http_requests: list[dict[str, Any]] = field(default_factory=list)
+    ssl_info: dict[str, Any] = field(default_factory=dict)
+    notices: list[dict[str, Any]] = field(default_factory=list)
+    files: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ZeekLogParser:
@@ -42,7 +42,7 @@ class ZeekLogParser:
     """
     
     @staticmethod
-    def parse_line(line: str, log_type: str) -> Optional[Dict[str, Any]]:
+    def parse_line(line: str, log_type: str) -> Optional[dict[str, Any]]:
         """Parse a single Zeek log line, auto-detecting format."""
         line = line.strip()
         if not line or line.startswith('#'):
@@ -60,7 +60,7 @@ class ZeekLogParser:
         return ZeekLogParser._parse_tsv(line, log_type)
     
     @staticmethod
-    def _normalize_json_fields(data: Dict[str, Any], log_type: str) -> Dict[str, Any]:
+    def _normalize_json_fields(data: dict[str, Any], log_type: str) -> dict[str, Any]:
         """Normalize Zeek JSON field names to consistent internal format."""
         normalized = {'_log_type': log_type, '_raw': data}
         
@@ -174,7 +174,7 @@ class ZeekLogParser:
         return normalized
     
     @staticmethod
-    def _parse_tsv(line: str, log_type: str) -> Optional[Dict[str, Any]]:
+    def _parse_tsv(line: str, log_type: str) -> Optional[dict[str, Any]]:
         """Fallback TSV parser for non-JSON Zeek output."""
         try:
             fields = line.split('\t')
@@ -245,8 +245,8 @@ class NetworkMonitor:
     def __init__(self):
         self.packet_count = 0
         self.is_monitoring = False
-        self.log_positions: Dict[str, int] = {}
-        self.connection_cache: Dict[str, ConnectionContext] = {}
+        self.log_positions: dict[str, int] = {}
+        self.connection_cache: dict[str, ConnectionContext] = {}
         self.cache_max_size = 10000
         self.parser = ZeekLogParser()
         self.zeek_log_dir: Optional[Path] = None
@@ -349,7 +349,7 @@ class NetworkMonitor:
         except Exception as e:
             logger.debug(f"Error reading {log_path.name}: {e}")
     
-    def _enrich_data(self, data: Dict[str, Any], log_type: str) -> Dict[str, Any]:
+    def _enrich_data(self, data: dict[str, Any], log_type: str) -> dict[str, Any]:
         """Enrich parsed data with additional context and computed features."""
         enriched = data.copy()
         
@@ -429,7 +429,7 @@ class NetworkMonitor:
         
         return enriched
     
-    def _update_connection_context(self, data: Dict[str, Any], log_type: str):
+    def _update_connection_context(self, data: dict[str, Any], log_type: str):
         """Update connection cache with data from auxiliary logs."""
         uid = data.get('uid')
         if not uid:
@@ -483,7 +483,7 @@ class NetworkMonitor:
         logger.info("🛑 Stopping Zeek network monitoring...")
         self.is_monitoring = False
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return current monitoring statistics."""
         return {
             'total_processed': self.packet_count,

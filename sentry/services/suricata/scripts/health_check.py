@@ -9,7 +9,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 
 def check_process_running() -> bool:
@@ -21,7 +21,7 @@ def check_process_running() -> bool:
         return False
 
 
-def get_stats_from_log() -> Optional[Dict[str, Any]]:
+def get_stats_from_log() -> Optional[dict[str, Any]]:
     """Parse the most recent stats from stats.log"""
     stats_log = Path("/var/log/suricata/stats.log")
     
@@ -60,7 +60,7 @@ def get_stats_from_log() -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_eve_stats() -> Dict[str, Any]:
+def get_eve_stats() -> dict[str, Any]:
     """Get stats from EVE JSON log"""
     eve_log = Path("/var/log/suricata/eve.json")
     
@@ -114,7 +114,7 @@ def get_eve_stats() -> Dict[str, Any]:
         return stats
 
 
-def check_log_freshness() -> Dict[str, Any]:
+def check_log_freshness() -> dict[str, Any]:
     """Check if logs are being written recently"""
     result = {
         "eve_fresh": False,

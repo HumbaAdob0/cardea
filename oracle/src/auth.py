@@ -151,7 +151,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-def check_permissions(required_roles: List[str]):
+def check_permissions(required_roles: list[str]):
     """Dependency to check if user has required roles"""
     def permission_checker(current_user: User = Depends(get_current_active_user)):
         if not any(role in current_user.roles for role in required_roles):
@@ -167,7 +167,7 @@ async def create_user(
     email: str,
     password: str,
     full_name: Optional[str] = None,
-    roles: Optional[List[str]] = None
+    roles: Optional[list[str]] = None
 ) -> User:
     """Create a new user"""
     try:

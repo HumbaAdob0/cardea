@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 import json
 
 logger = logging.getLogger(__name__)
@@ -20,10 +20,10 @@ class AlertProcessor:
         self.threshold = threshold
         self.sentry_id = sentry_id
         self.alerts_queue = asyncio.Queue()
-        self.alerts_history: List[Dict[str, Any]] = []
+        self.alerts_history: list[dict[str, Any]] = []
         self.processed_count = 0
         
-    async def process_alert(self, alert_data: Dict[str, Any]) -> str:
+    async def process_alert(self, alert_data: dict[str, Any]) -> str:
         """Process incoming alert and return alert ID"""
         alert_id = str(uuid.uuid4())
         
@@ -62,7 +62,7 @@ class AlertProcessor:
                 logger.error(f"Error in alert processing: {e}")
                 continue
     
-    async def _process_single_alert(self, alert: Dict[str, Any]):
+    async def _process_single_alert(self, alert: dict[str, Any]):
         """Process a single alert"""
         source = alert.get("source", "unknown")
         
@@ -85,7 +85,7 @@ class AlertProcessor:
         else:
             logger.info(f"Unknown alert source processed: {source}")
     
-    async def get_recent_alerts(self, limit: int = 50) -> List[Dict[str, Any]]:
+    async def get_recent_alerts(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get recent alerts"""
         return self.alerts_history[-limit:] if self.alerts_history else []
     
@@ -95,7 +95,7 @@ class AlertProcessor:
         self.threshold = new_threshold
         logger.info(f"Threshold updated: {old_threshold} -> {new_threshold}")
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get processing statistics"""
         return {
             "processed_count": self.processed_count,

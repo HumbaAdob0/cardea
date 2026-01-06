@@ -7,7 +7,7 @@ Manages alert sending to Bridge service with robust type handling
 import asyncio
 import logging
 import aiohttp
-from typing import Dict, Any, Union
+from typing import Any, Union
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class AlertManager:
         self.alert_count = 0
         self.session = None
         
-    async def send_alert(self, score_data: Union[float, Dict[str, Any]], packet_info: Dict[str, Any] = None):
+    async def send_alert(self, score_data: Union[float, dict[str, Any]], packet_info: dict[str, Any] = None):
         """
         Send formatted alert to Bridge service.
         Handles cases where score might be wrapped in a dictionary to prevent TypeErrors.

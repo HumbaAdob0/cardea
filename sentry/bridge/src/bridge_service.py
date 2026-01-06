@@ -17,7 +17,7 @@ import os
 import httpx
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Optional, Any
 from dataclasses import dataclass, asdict
 from contextlib import asynccontextmanager
 
@@ -113,7 +113,7 @@ class Alert:
     source: str
     event_type: str
     description: str
-    raw_data: Dict[str, Any]
+    raw_data: dict[str, Any]
     confidence: float = 0.0
     status: str = "new"
 
@@ -122,22 +122,22 @@ class AlertRequest(BaseModel):
     severity: str
     event_type: str
     description: str
-    raw_data: Dict[str, Any]
+    raw_data: dict[str, Any]
     confidence: float = 0.0
 
 class SuricataAlertRequest(BaseModel):
     """Suricata-specific alert format from EVE JSON"""
     source: str = "suricata"
     timestamp: Optional[str] = None
-    alert: Dict[str, Any]  # signature, category, severity, signature_id
-    network: Dict[str, Any]  # src_ip, dest_ip, src_port, dest_port, protocol
+    alert: dict[str, Any]  # signature, category, severity, signature_id
+    network: dict[str, Any]  # src_ip, dest_ip, src_port, dest_port, protocol
     flow_id: Optional[int] = None
     
     # Optional extended fields
-    http: Optional[Dict[str, Any]] = None
-    dns: Optional[Dict[str, Any]] = None
-    tls: Optional[Dict[str, Any]] = None
-    fileinfo: Optional[Dict[str, Any]] = None
+    http: Optional[dict[str, Any]] = None
+    dns: Optional[dict[str, Any]] = None
+    tls: Optional[dict[str, Any]] = None
+    fileinfo: Optional[dict[str, Any]] = None
 
 # MITRE ATT&CK mapping for common Suricata rule categories
 SURICATA_CATEGORY_TO_MITRE = {
@@ -158,12 +158,12 @@ SURICATA_CATEGORY_TO_MITRE = {
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
-    services: Dict[str, Dict[str, Any]]
-    platform: Dict[str, str]
+    services: dict[str, dict[str, Any]]
+    platform: dict[str, str]
 
 # --- CORE SERVICE LOGIC ---
 
-async def escalate_to_oracle(alert_data: Dict[str, Any]):
+async def escalate_to_oracle(alert_data: dict[str, Any]):
     """Pushes local anomaly evidence to the Azure-powered Oracle Cloud"""
     oracle_url = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000/api/alerts")
     
@@ -242,8 +242,8 @@ class BridgeService:
         except Exception:
             self.platform_detector = BasicPlatformDetector()
             
-        self.alerts: List[Alert] = []
-        self.services_status: Dict[str, Dict[str, Any]] = {}
+        self.alerts: list[Alert] = []
+        self.services_status: dict[str, dict[str, Any]] = {}
         
         self.local_stats = {
             "anomaly_score": 0.0,
@@ -277,7 +277,7 @@ class BridgeService:
                 self.data_paths[service] = Path(f"/tmp/cardea/{service}")
                 self.data_paths[service].mkdir(parents=True, exist_ok=True)
 
-    async def check_service_health(self, service: str) -> Dict[str, Any]:
+    async def check_service_health(self, service: str) -> dict[str, Any]:
         health_info = {"status": "healthy", "last_check": datetime.now().isoformat(), "details": {}}
         if service == "bridge":
             health_info["details"] = {"alerts_in_buffer": len(self.alerts), "uptime": str(datetime.now() - self.local_stats["start_time"])}
@@ -299,7 +299,7 @@ class BridgeService:
             self.local_stats["anomaly_score"] = req.raw_data["score"]
         return alert
 
-    async def get_network_discovery(self) -> Dict[str, Any]:
+    async def get_network_discovery(self) -> dict[str, Any]:
         """Dynamically scans local logs and health to build the map data"""
         devices = []
         links = []
@@ -348,7 +348,7 @@ bridge_service = BridgeService()
 
 # --- ZEEK NOTICE INTEGRATION ---
 
-async def handle_zeek_notice_alert(alert_data: Dict[str, Any]):
+async def handle_zeek_notice_alert(alert_data: dict[str, Any]):
     """Callback for Zeek notice monitor - injects notices as alerts."""
     try:
         req = AlertRequest(
