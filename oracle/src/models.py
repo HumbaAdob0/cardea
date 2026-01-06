@@ -21,6 +21,20 @@ class AlertType(str, Enum):
     SUSPICIOUS_BEHAVIOR = "suspicious_behavior"
     DATA_EXFILTRATION = "data_exfiltration"
     UNAUTHORIZED_ACCESS = "unauthorized_access"
+    # Suricata alert types
+    IDS_ALERT = "ids_alert"
+    SIGNATURE_MATCH = "signature_match"
+    # Zeek notice types (prefixed with zeek_)
+    ZEEK_SCAN = "zeek_scan"
+    ZEEK_RECON = "zeek_recon"
+    ZEEK_ATTACK = "zeek_attack"
+    ZEEK_EXPLOIT = "zeek_exploit"
+    ZEEK_POLICY = "zeek_policy"
+    ZEEK_INTEL = "zeek_intel"
+    ZEEK_WEIRD = "zeek_weird"
+    ZEEK_NOTICE = "zeek_notice"
+    # Catch-all for unknown types
+    UNKNOWN = "unknown"
 
 # Request Models
 class AlertRequest(BaseModel):

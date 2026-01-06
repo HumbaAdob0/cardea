@@ -3,6 +3,7 @@ Oracle Backend FastAPI Service - Optimized for Azure AI & Credit Protection
 Includes Redis-based De-duplication and Rate Limiting
 """
 
+import os
 import logging
 import hashlib
 from datetime import datetime, timezone, timedelta

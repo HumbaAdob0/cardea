@@ -167,22 +167,73 @@ async def escalate_to_oracle(alert_data: Dict[str, Any]):
     """Pushes local anomaly evidence to the Azure-powered Oracle Cloud"""
     oracle_url = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000/api/alerts")
     
+    # Normalize alert_type to match Oracle's AlertType enum
+    event_type = alert_data.get("event_type", "unknown")
+    alert_type_map = {
+        "network_anomaly": "network_anomaly",
+        "ids_alert": "ids_alert",
+        "signature_match": "signature_match",
+        "intrusion_detection": "intrusion_detection",
+    }
+    # Handle zeek notice types (zeek_scan, zeek_recon, etc.)
+    if event_type.startswith("zeek_"):
+        alert_type = event_type if event_type in [
+            "zeek_scan", "zeek_recon", "zeek_attack", "zeek_exploit",
+            "zeek_policy", "zeek_intel", "zeek_weird", "zeek_notice"
+        ] else "zeek_notice"
+    else:
+        alert_type = alert_type_map.get(event_type, "unknown")
+    
+    # Extract network context if available
+    network_context = alert_data.get("network", {})
+    if not network_context and "raw_data" in alert_data:
+        raw = alert_data["raw_data"]
+        network_context = {
+            "src_ip": raw.get("src_ip"),
+            "dest_ip": raw.get("dest_ip"),
+            "src_port": raw.get("src_port"),
+            "dest_port": raw.get("dest_port"),
+            "protocol": raw.get("protocol"),
+        }
+    
+    # Extract indicators from raw_data
+    indicators = []
+    if "raw_data" in alert_data:
+        raw = alert_data["raw_data"]
+        if raw.get("mitre_technique"):
+            indicators.append(f"MITRE:{raw['mitre_technique']}")
+        if raw.get("signature"):
+            indicators.append(f"SIG:{raw['signature'][:50]}")
+        if raw.get("src_ip"):
+            indicators.append(f"IP:{raw['src_ip']}")
+    
     async with httpx.AsyncClient() as client:
         payload = {
-            "source": alert_data["source"],
-            "alert_type": alert_data["event_type"],
-            "severity": alert_data["severity"],
-            "title": f"Sentry Alert: {alert_data['event_type'].upper()}",
-            "description": alert_data["description"],
-            "raw_data": alert_data["raw_data"],
+            "source": alert_data.get("source", "bridge"),
+            "alert_type": alert_type,
+            "severity": alert_data.get("severity", "medium"),
+            "title": f"Sentry Alert: {event_type.upper().replace('_', ' ')}",
+            "description": alert_data.get("description", "Security alert from Sentry"),
+            "raw_data": alert_data.get("raw_data", {}),
+            "network_context": network_context,
+            "indicators": indicators,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
         try:
-            response = await client.post(oracle_url, json=payload, timeout=5.0)
-            logger.info(f"☁️ Oracle Cloud Escalation: {response.status_code}")
-            bridge_service.local_stats["escalations"] += 1
+            response = await client.post(oracle_url, json=payload, timeout=10.0)
+            if response.status_code in (200, 201, 202):
+                logger.info(f"☁️ Oracle Cloud Escalation: {response.status_code} ({alert_type})")
+                bridge_service.local_stats["escalations"] += 1
+            elif response.status_code == 422:
+                logger.error(f"❌ Oracle Schema Mismatch: {response.text}")
+            else:
+                logger.warning(f"⚠️ Oracle responded: {response.status_code}")
+        except httpx.TimeoutException:
+            logger.error(f"❌ Oracle Cloud Timeout")
+        except httpx.ConnectError:
+            logger.error(f"❌ Oracle Cloud Unreachable (connection refused)")
         except Exception as e:
-            logger.error(f"❌ Oracle Cloud Unreachable: {e}")
+            logger.error(f"❌ Oracle Cloud Error: {e}")
 
 class BridgeService:
     def __init__(self):
