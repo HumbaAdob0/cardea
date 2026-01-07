@@ -5,6 +5,7 @@ import "./index.css";
 import App from "./App.tsx";
 import LoginPage from "./components/LoginPage.tsx"; // Import your Login Page
 import RegisterPage from "./components/RegisterPage.tsx"; // Import Register Page
+import { ProtectedRoute } from "./components/ProtectedRoute.tsx";
 import { AuthProvider } from "./contexts/AuthContext.tsx";
 
 createRoot(document.getElementById("root")!).render(
@@ -19,8 +20,15 @@ createRoot(document.getElementById("root")!).render(
           {/* Registration Page - Native Authentication */}
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Dashboard - Main App */}
-          <Route path="/dashboard" element={<App />} />
+          {/* Dashboard - Main App (Protected) */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <App />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
