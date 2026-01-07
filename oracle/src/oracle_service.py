@@ -34,6 +34,11 @@ DEDUPE_WINDOW_SECONDS = 60      # Ignore identical alerts within 1 minute
 GLOBAL_MINUTE_LIMIT = 50        # Hard cap: Max 50 AI-processed alerts per minute
 AI_MAX_RESPONSE_TOKENS = 150    # Force brevity to save output tokens
 
+# --- AI INSIGHT RATE LIMITING (Bill Protection) ---
+AI_INSIGHT_CACHE_SECONDS = 30   # Cache AI insights for 30 seconds
+AI_INSIGHT_MAX_PER_MINUTE = 6   # Max 6 AI insight generations per minute
+AI_INSIGHT_MAX_PER_HOUR = 100   # Max 100 per hour (absolute safety cap)
+
 # Initialize Redis client for safeguards
 # Use REDIS_URL if provided (docker-compose), otherwise fallback to building from REDIS_HOST
 redis_url = os.getenv('REDIS_URL', f"redis://{os.getenv('REDIS_HOST', 'localhost')}:6379/0")
@@ -73,6 +78,69 @@ async def check_abuse_safeguards(alert: AlertRequest) -> bool:
     # Mark as seen for the dedupe window
     await redis_client.setex(dedupe_key, DEDUPE_WINDOW_SECONDS, "1")
     return False
+
+
+async def get_cached_ai_insight():
+    """
+    Get cached AI insight or None if cache is stale.
+    This prevents spamming Azure OpenAI with rapid dashboard refreshes.
+    """
+    try:
+        cached = await redis_client.get("ai_insight:cache")
+        if cached:
+            data = json.loads(cached)
+            # Check staleness - include age in response
+            cached_at = datetime.fromisoformat(data.get("cached_at", ""))
+            age_seconds = (datetime.now(timezone.utc) - cached_at).total_seconds()
+            data["age_seconds"] = age_seconds
+            data["is_cached"] = True
+            return data
+    except Exception as e:
+        logger.warning(f"Cache read failed: {e}")
+    return None
+
+
+async def cache_ai_insight(insight_dict: dict):
+    """Cache an AI insight with timestamp"""
+    try:
+        insight_dict["cached_at"] = datetime.now(timezone.utc).isoformat()
+        await redis_client.setex(
+            "ai_insight:cache",
+            AI_INSIGHT_CACHE_SECONDS,
+            json.dumps(insight_dict)
+        )
+    except Exception as e:
+        logger.warning(f"Cache write failed: {e}")
+
+
+async def check_ai_insight_rate_limit() -> tuple[bool, str]:
+    """
+    Check if we're within AI insight generation rate limits.
+    Returns (allowed, reason)
+    """
+    try:
+        minute_key = f"ai_insight:minute:{datetime.now().strftime('%H%M')}"
+        hour_key = f"ai_insight:hour:{datetime.now().strftime('%H')}"
+        
+        async with redis_client.pipeline(transaction=True) as pipe:
+            pipe.incr(minute_key)
+            pipe.expire(minute_key, 120)  # Expire after 2 minutes
+            pipe.incr(hour_key)
+            pipe.expire(hour_key, 3700)  # Expire after ~1 hour
+            results = await pipe.execute()
+        
+        minute_count = results[0]
+        hour_count = results[2]
+        
+        if minute_count > AI_INSIGHT_MAX_PER_MINUTE:
+            return False, f"Rate limit: {minute_count}/{AI_INSIGHT_MAX_PER_MINUTE} per minute"
+        if hour_count > AI_INSIGHT_MAX_PER_HOUR:
+            return False, f"Rate limit: {hour_count}/{AI_INSIGHT_MAX_PER_HOUR} per hour"
+        
+        return True, "OK"
+    except Exception as e:
+        logger.error(f"Rate limit check failed: {e}")
+        return True, "Rate limit check unavailable"
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -546,7 +614,44 @@ async def notify_sentry_lockdown(enable: bool, duration_minutes: int):
         logger.warning(f"Failed to notify Sentry Bridge for lockdown: {e}")
 
 async def generate_ai_insight(analytics_data: dict[str, Any], threat_analyzer: ThreatAnalyzer):
-    """Generate conversational, actionable AI insight for non-technical users"""
+    """
+    Generate conversational, actionable AI insight for non-technical users.
+    
+    BILL PROTECTION: This function implements multiple safeguards:
+    1. Cache-first: Returns cached insight if < 30 seconds old
+    2. Rate limit: Max 6 calls/minute, 100/hour to Azure OpenAI
+    3. Deterministic fallback: If AI is unavailable or rate-limited
+    """
+    from models import AIInsight, ActionButton
+    
+    # --- BILL PROTECTION: Check cache first ---
+    cached = await get_cached_ai_insight()
+    if cached:
+        # Return cached insight (it's still fresh enough)
+        logger.debug(f"Using cached AI insight (age: {cached.get('age_seconds', 0):.0f}s)")
+        # Reconstruct AIInsight from cached data
+        return AIInsight(
+            greeting=cached.get("greeting", "Hi there 👋"),
+            status_emoji=cached.get("status_emoji", "🟢"),
+            headline=cached.get("headline", "Checking your network..."),
+            story=cached.get("story", ""),
+            actions_taken=cached.get("actions_taken", []),
+            decisions=[ActionButton(**d) for d in cached.get("decisions", [])],
+            confidence=cached.get("confidence", 0.8),
+            ai_powered=cached.get("ai_powered", False)
+        )
+    
+    # Generate fresh insight
+    insight = await _generate_ai_insight_internal(analytics_data, threat_analyzer)
+    
+    # Cache the result for future requests
+    await cache_ai_insight(insight.model_dump())
+    
+    return insight
+
+
+async def _generate_ai_insight_internal(analytics_data: dict[str, Any], threat_analyzer: ThreatAnalyzer):
+    """Internal insight generation - called when cache is stale"""
     from models import AIInsight, ActionButton
     
     total_alerts = analytics_data.get("total_alerts", 0)
@@ -577,15 +682,28 @@ async def generate_ai_insight(analytics_data: dict[str, Any], threat_analyzer: T
     # Deduplicate IPs
     suspicious_ips = list(set(suspicious_ips))[:3]
     
-    # Try AI-powered insight generation
+    # --- AI-POWERED INSIGHT (with rate limiting) ---
+    ai_insight = None
     if threat_analyzer.ai_client and settings.AI_ENABLED:
-        # AI prompt would go here - skipping for now since AI is not connected
-        pass
+        # Check rate limits before calling Azure OpenAI
+        allowed, reason = await check_ai_insight_rate_limit()
+        if allowed:
+            try:
+                # TODO: Implement AI prompt for conversational insights
+                # For now, we use deterministic responses
+                logger.info(f"🤖 AI insight generation allowed ({reason})")
+            except Exception as e:
+                logger.warning(f"AI insight generation failed: {e}")
+        else:
+            logger.info(f"🚫 AI insight skipped: {reason}")
     
     # --- CONSUMER-FRIENDLY DETERMINISTIC RESPONSES ---
+    # (These are used when AI is unavailable or rate-limited)
+    
+    insight = None  # Will be set below
     
     if total_alerts == 0:
-        return AIInsight(
+        insight = AIInsight(
             greeting="Good news! 🎉",
             status_emoji="🟢",
             headline="Your network is safe and quiet",

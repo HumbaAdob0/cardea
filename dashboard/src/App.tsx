@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   Shield, Activity, Zap, Server, AlertCircle, AlertTriangle, Info, XCircle,
-  Sparkles, CheckCircle2, WifiOff, RefreshCw
+  Sparkles, CheckCircle2, WifiOff, RefreshCw, Eye, BarChart3
 } from 'lucide-react';
 import type { AnalyticsResponse, Alert, AIInsight } from './types'; 
 import { ThreatOverview } from './components/ThreatOverview';
@@ -308,31 +308,10 @@ const App: React.FC = () => {
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
-  // View mode: 'simple' (default) or 'detailed' - TODO: Implement UI toggle
-  // const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
-  
-  // System status (lockdown, blocked IPs, etc.) - TODO: Wire to API
-  // const [systemStatus, setSystemStatus] = useState<{
-  //   lockdown_active: boolean;
-  //   blocked_ips_count: number;
-  //   monitoring_enhanced: boolean;
-  // } | null>(null);
-
-  // Fetch system status - TODO: Enable when API is ready
-  // const fetchSystemStatus = useCallback(async () => {
-  //   try {
-  //     const res = await axios.get(`${ORACLE_URL}/api/status`, { timeout: 5000 });
-  //     setSystemStatus(res.data);
-  //   } catch (err) {
-  //     console.warn('Could not fetch system status');
-  //   }
-  // }, []);
-
-  // useEffect(() => {
-  //   fetchSystemStatus();
-  //   const interval = setInterval(fetchSystemStatus, 10000);
-  //   return () => clearInterval(interval);
-  // }, [fetchSystemStatus]);
+  // View mode: 'simple' (default) or 'detailed'
+  // Simple = AI insights + basic status only (for non-technical users)
+  // Detailed = Full graphs, tables, technical data
+  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
 
   // Handle security action decisions - REAL API CALLS
   const handleSecurityAction = useCallback(async (action: { id: string; action_type: string; target?: string }) => {
@@ -383,7 +362,25 @@ const App: React.FC = () => {
               CARDEA <span className="text-slate-500 font-light">ORACLE</span>
             </span>
           </div>
-          <div className="flex items-center gap-6 text-[10px] font-bold text-slate-500 tracking-widest uppercase">
+          <div className="flex items-center gap-4">
+            {/* View Mode Toggle */}
+            <button
+              onClick={() => setViewMode(viewMode === 'simple' ? 'detailed' : 'simple')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                viewMode === 'detailed'
+                  ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50'
+                  : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
+              }`}
+              title={viewMode === 'simple' ? 'Show technical details' : 'Hide technical details'}
+            >
+              {viewMode === 'detailed' ? (
+                <><BarChart3 className="w-3.5 h-3.5" /> Technical View</>
+              ) : (
+                <><Eye className="w-3.5 h-3.5" /> Simple View</>
+              )}
+            </button>
+            
+            <div className="flex items-center gap-6 text-[10px] font-bold text-slate-500 tracking-widest uppercase">
             {isConnected && (criticalCount > 0 || highCount > 0) && (
               <span className="flex items-center gap-1.5 text-red-500">
                 <AlertTriangle className="w-3 h-3" />
@@ -396,175 +393,237 @@ const App: React.FC = () => {
                 Updated: {lastUpdate.toLocaleTimeString([], { hour12: false })}
               </span>
             )}
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-6">
-        {/* AI INSIGHT CARD - First thing users see */}
+        {/* AI INSIGHT CARD - Always visible, this is the main interface */}
         <AIInsightCard 
           insight={data?.ai_insight} 
           isLoading={isLoading && !data} 
           onAction={handleSecurityAction}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <ThreatOverview 
-              alerts={data?.alerts || []} 
-              severityStats={severityStats}
-              isConnected={isConnected}
-            />
-          </div>
-          
-          <div className="flex flex-col gap-6">
-            <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-xl flex-1 flex flex-col justify-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-2 opacity-10">
-                <Zap className="w-20 h-20 text-cyan-400" />
+        {/* SIMPLE MODE: Just show network health summary */}
+        {viewMode === 'simple' && isConnected && data && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Network Status Card */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-2 h-2 rounded-full ${
+                  criticalCount > 0 ? 'bg-red-500 animate-pulse' :
+                  highCount > 0 ? 'bg-orange-500' : 'bg-green-500'
+                }`} />
+                <span className="text-xs font-medium text-slate-400">Network Status</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-500 mb-2 relative z-10">
-                <Zap className="w-3 h-3 text-cyan-500" />
-                <p className="text-[10px] font-bold uppercase tracking-wider">Risk Index</p>
-              </div>
-              {isConnected && data ? (
-                <>
-                  <p className={`text-5xl font-extralight relative z-10 ${
-                    (data?.risk_score || 0) >= 0.7 ? 'text-red-400' : 
-                    (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'
-                  }`}>
-                    {((data?.risk_score || 0) * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-[10px] text-slate-600 mt-4 leading-relaxed font-medium uppercase tracking-tighter">
-                    AI-Powered Threat Analysis
-                  </p>
-                </>
-              ) : (
-                <p className="text-5xl font-extralight text-slate-700 relative z-10">—</p>
-              )}
+              <p className={`text-lg font-semibold ${
+                criticalCount > 0 ? 'text-red-400' :
+                highCount > 0 ? 'text-orange-400' : 'text-green-400'
+              }`}>
+                {criticalCount > 0 ? 'Needs Attention' :
+                 highCount > 0 ? 'Monitoring' : 'All Clear'}
+              </p>
             </div>
-            
-            <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-xl flex-1 flex flex-col justify-center">
-              <div className="flex items-center gap-2 text-slate-500 mb-2">
-                <Activity className="w-3 h-3 text-purple-500" />
-                <p className="text-[10px] font-bold uppercase tracking-wider">Telemetry Events</p>
-              </div>
-              {isConnected && data ? (
-                <>
-                  <p className="text-5xl font-extralight">{data.total_alerts || 0}</p>
-                  
-                  {/* Severity Breakdown */}
-                  {Object.keys(severityStats).length > 0 && (
-                    <div className="flex gap-3 mt-4">
-                      {Object.entries(severityStats).map(([severity, count]) => {
-                        const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
-                        return (
-                          <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
-                            <span className="font-bold">{count}</span>
-                            <span className="uppercase opacity-70">{severity}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-5xl font-extralight text-slate-700">—</p>
-              )}
-            </div>
-          </div>
-        </div>
 
-        <div className="bg-slate-900/20 border border-slate-900 rounded-xl overflow-hidden shadow-2xl">
-          <div className="px-6 py-4 border-b border-slate-900 bg-slate-900/40 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-slate-500" />
-                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Live Anomaly Feed</h2>
+            {/* Risk Level */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-3 h-3 text-cyan-500" />
+                <span className="text-xs font-medium text-slate-400">Risk Level</span>
+              </div>
+              <p className={`text-lg font-semibold ${
+                (data?.risk_score || 0) >= 0.7 ? 'text-red-400' :
+                (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'
+              }`}>
+                {(data?.risk_score || 0) >= 0.7 ? 'High' :
+                 (data?.risk_score || 0) >= 0.4 ? 'Medium' : 'Low'}
+              </p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">
-                  Showing latest 50 alerts
+
+            {/* Events Today */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="w-3 h-3 text-purple-500" />
+                <span className="text-xs font-medium text-slate-400">Events Today</span>
               </div>
-              <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">
-                  Updates: Auto (5s)
+              <p className="text-lg font-semibold text-slate-200">{data.total_alerts || 0}</p>
+            </div>
+
+            {/* Protection Status */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="w-3 h-3 text-green-500" />
+                <span className="text-xs font-medium text-slate-400">Protection</span>
               </div>
+              <p className="text-lg font-semibold text-green-400">Active</p>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-slate-600 text-[10px] uppercase tracking-widest border-b border-slate-900/50">
-                  <th className="px-6 py-4 font-bold">Timestamp</th>
-                  <th className="px-6 py-4 font-bold">Alert Signature</th>
-                  <th className="px-6 py-4 font-bold">Source</th>
-                  <th className="px-6 py-4 font-bold text-center">Threat</th>
-                  <th className="px-6 py-4 font-bold text-right">Severity</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-900/50">
-                {/* Handle disconnected state */}
-                {!isConnected ? (
-                  <tr>
-                    <td colSpan={5} className="p-16 text-center">
-                      <EmptyState 
-                        icon={WifiOff}
-                        title="Oracle Backend Offline"
-                        description="Unable to connect to the Cardea Oracle backend. The system will automatically retry the connection. Check that the Oracle service is running."
-                      />
-                    </td>
-                  </tr>
-                ) : data?.alerts && data.alerts.length > 0 ? (
-                  data.alerts.map((alert: Alert) => {
-                    const config = severityConfig[alert.severity] || severityConfig.low;
-                    const SeverityIcon = config.icon;
-                    return (
-                    <tr key={alert.id} className="hover:bg-slate-900/40 transition-colors group">
-                      <td className="px-6 py-5 text-xs text-slate-500 font-mono tabular-nums">
-                        {new Date(alert.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </td>
-                      <td className="px-6 py-5">
-                        <p className="text-sm font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
-                          {(alert.alert_type || 'Unknown').replaceAll('_', ' ').toUpperCase()}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 italic max-w-md">"{alert.description}"</p>
-                      </td>
-                      <td className="px-6 py-5 text-xs font-mono text-slate-400">
-                        {alert.source}
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        {alert.threat_score !== undefined && alert.threat_score !== null ? (
-                          <span className={`text-[10px] font-bold tabular-nums ${
-                            alert.threat_score >= 0.7 ? 'text-red-500' : 
-                            alert.threat_score >= 0.4 ? 'text-yellow-500' : 'text-green-500'
-                          }`}>
-                            {(alert.threat_score * 100).toFixed(0)}%
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-600">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-1 rounded border tracking-tighter ${config.bg} ${config.color}`}>
-                          <SeverityIcon className="w-3 h-3" />
-                          {alert.severity.toUpperCase()}
-                        </span>
-                      </td>
+        )}
+
+        {/* DETAILED MODE: Show all technical information */}
+        {viewMode === 'detailed' && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <ThreatOverview 
+                  alerts={data?.alerts || []} 
+                  severityStats={severityStats}
+                  isConnected={isConnected}
+                />
+              </div>
+              
+              <div className="flex flex-col gap-6">
+                <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-xl flex-1 flex flex-col justify-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-2 opacity-10">
+                    <Zap className="w-20 h-20 text-cyan-400" />
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-500 mb-2 relative z-10">
+                    <Zap className="w-3 h-3 text-cyan-500" />
+                    <p className="text-[10px] font-bold uppercase tracking-wider">Risk Index</p>
+                  </div>
+                  {isConnected && data ? (
+                    <>
+                      <p className={`text-5xl font-extralight relative z-10 ${
+                        (data?.risk_score || 0) >= 0.7 ? 'text-red-400' : 
+                        (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'
+                      }`}>
+                        {((data?.risk_score || 0) * 100).toFixed(1)}%
+                      </p>
+                      <p className="text-[10px] text-slate-600 mt-4 leading-relaxed font-medium uppercase tracking-tighter">
+                        AI-Powered Threat Analysis
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-5xl font-extralight text-slate-700 relative z-10">—</p>
+                  )}
+                </div>
+                
+                <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-xl flex-1 flex flex-col justify-center">
+                  <div className="flex items-center gap-2 text-slate-500 mb-2">
+                    <Activity className="w-3 h-3 text-purple-500" />
+                    <p className="text-[10px] font-bold uppercase tracking-wider">Telemetry Events</p>
+                  </div>
+                  {isConnected && data ? (
+                    <>
+                      <p className="text-5xl font-extralight">{data.total_alerts || 0}</p>
+                      
+                      {/* Severity Breakdown */}
+                      {Object.keys(severityStats).length > 0 && (
+                        <div className="flex gap-3 mt-4">
+                          {Object.entries(severityStats).map(([severity, count]) => {
+                            const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
+                            return (
+                              <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
+                                <span className="font-bold">{count as number}</span>
+                                <span className="uppercase opacity-70">{severity}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-5xl font-extralight text-slate-700">—</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/20 border border-slate-900 rounded-xl overflow-hidden shadow-2xl">
+              <div className="px-6 py-4 border-b border-slate-900 bg-slate-900/40 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Server className="w-4 h-4 text-slate-500" />
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Live Anomaly Feed</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">
+                      Showing latest 50 alerts
+                  </div>
+                  <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">
+                      Updates: Auto (5s)
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-slate-600 text-[10px] uppercase tracking-widest border-b border-slate-900/50">
+                      <th className="px-6 py-4 font-bold">Timestamp</th>
+                      <th className="px-6 py-4 font-bold">Alert Signature</th>
+                      <th className="px-6 py-4 font-bold">Source</th>
+                      <th className="px-6 py-4 font-bold text-center">Threat</th>
+                      <th className="px-6 py-4 font-bold text-right">Severity</th>
                     </tr>
-                  )})
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="p-16 text-center">
-                      <EmptyState 
-                        icon={Shield}
-                        title="No Active Threats"
-                        description="No tactical anomalies detected in the current monitoring buffer. The network appears secure."
-                      />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900/50">
+                    {/* Handle disconnected state */}
+                    {!isConnected ? (
+                      <tr>
+                        <td colSpan={5} className="p-16 text-center">
+                          <EmptyState 
+                            icon={WifiOff}
+                            title="Oracle Backend Offline"
+                            description="Unable to connect to the Cardea Oracle backend. The system will automatically retry the connection. Check that the Oracle service is running."
+                          />
+                        </td>
+                      </tr>
+                    ) : data?.alerts && data.alerts.length > 0 ? (
+                      data.alerts.map((alert: Alert) => {
+                        const config = severityConfig[alert.severity] || severityConfig.low;
+                        const SeverityIcon = config.icon;
+                        return (
+                        <tr key={alert.id} className="hover:bg-slate-900/40 transition-colors group">
+                          <td className="px-6 py-5 text-xs text-slate-500 font-mono tabular-nums">
+                            {new Date(alert.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="px-6 py-5">
+                            <p className="text-sm font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
+                              {(alert.alert_type || 'Unknown').replaceAll('_', ' ').toUpperCase()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 italic max-w-md">"{alert.description}"</p>
+                          </td>
+                          <td className="px-6 py-5 text-xs font-mono text-slate-400">
+                            {alert.source}
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                            {alert.threat_score !== undefined && alert.threat_score !== null ? (
+                              <span className={`text-[10px] font-bold tabular-nums ${
+                                alert.threat_score >= 0.7 ? 'text-red-500' : 
+                                alert.threat_score >= 0.4 ? 'text-yellow-500' : 'text-green-500'
+                              }`}>
+                                {(alert.threat_score * 100).toFixed(0)}%
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-5 text-right">
+                            <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-1 rounded border tracking-tighter ${config.bg} ${config.color}`}>
+                              <SeverityIcon className="w-3 h-3" />
+                              {alert.severity.toUpperCase()}
+                            </span>
+                          </td>
+                        </tr>
+                      )})
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="p-16 text-center">
+                          <EmptyState 
+                            icon={Shield}
+                            title="No Active Threats"
+                            description="No tactical anomalies detected in the current monitoring buffer. The network appears secure."
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
