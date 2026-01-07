@@ -353,8 +353,8 @@ const App: React.FC = () => {
         // Show success message from the backend
         alert(`✅ ${res.data.message}`);
         
-        // Refresh data and status
-        await Promise.all([fetchData(), fetchSystemStatus()]);
+        // Refresh data
+        await fetchData();
       } else {
         alert(`⚠️ Action failed: ${res.data.message}`);
       }
@@ -362,7 +362,7 @@ const App: React.FC = () => {
       console.error('Action execution failed:', err);
       alert(`❌ Failed to execute action: ${err.response?.data?.detail || err.message}`);
     }
-  }, [fetchData, fetchSystemStatus]);
+  }, [fetchData]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">
