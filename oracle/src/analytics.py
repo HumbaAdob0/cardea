@@ -42,7 +42,7 @@ class ThreatAnalyzer:
         
         # Initialize Azure OpenAI client
         self.ai_client = None
-        if settings.AI_ENABLED and settings.AZURE_OPENAI_API_KEY:
+        if settings.ai_is_enabled and settings.AZURE_OPENAI_API_KEY:
             try:
                 self.ai_client = AsyncAzureOpenAI(
                     api_key=settings.AZURE_OPENAI_API_KEY,

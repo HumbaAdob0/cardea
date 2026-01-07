@@ -189,7 +189,7 @@ def create_app() -> FastAPI:
             overall_healthy = False
         
         # 3. Azure OpenAI Health Check
-        if settings.AI_ENABLED and threat_analyzer.ai_client:
+        if settings.ai_is_enabled and threat_analyzer.ai_client:
             try:
                 # Lightweight check - just verify client is configured
                 services["azure_openai"] = {
@@ -204,7 +204,7 @@ def create_app() -> FastAPI:
             services["azure_openai"] = {
                 "status": "disabled",
                 "enabled": False,
-                "reason": "AI_ENABLED=false or missing API key"
+                "reason": "AI disabled or missing API key/endpoint"
             }
         
         # 4. Azure AI Search Health Check
@@ -684,7 +684,7 @@ async def _generate_ai_insight_internal(analytics_data: dict[str, Any], threat_a
     
     # --- AI-POWERED INSIGHT (with rate limiting) ---
     ai_insight = None
-    if threat_analyzer.ai_client and settings.AI_ENABLED:
+    if threat_analyzer.ai_client and settings.ai_is_enabled:
         # Check rate limits before calling Azure OpenAI
         allowed, reason = await check_ai_insight_rate_limit()
         if allowed:
@@ -868,7 +868,7 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
             threat_score = 0.4
             ai_analysis = None
             
-            if settings.AZURE_OPENAI_API_KEY and settings.AI_ENABLED:
+            if settings.AZURE_OPENAI_API_KEY and settings.ai_is_enabled:
                 # Optimized call: max_tokens prevents bill shock from long GPT ramblings
                 threat_score = await threat_analyzer.calculate_threat_score(alert)
                 

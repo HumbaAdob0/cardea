@@ -84,12 +84,25 @@ class Settings(BaseSettings):
     AZURE_SEARCH_INDEX_NAME: str = "threat-intelligence"
     
     # AI Agent Configuration
-    AI_ENABLED: bool = Field(
-        default=False, 
-        description="Enable AI-powered analysis (requires Azure OpenAI keys)"
+    AI_ENABLED: Optional[bool] = Field(
+        default=None, 
+        description="Enable AI-powered analysis. Auto-enabled when Azure OpenAI keys are present."
     )
     AI_MODEL_TEMPERATURE: float = Field(default=0.3, ge=0.0, le=2.0)
     AI_MAX_TOKENS: int = Field(default=150, ge=50, le=4096)
+    
+    @computed_field
+    @property
+    def ai_is_enabled(self) -> bool:
+        """
+        Check if AI is enabled. Auto-enables when Azure OpenAI keys are present.
+        Can be explicitly disabled by setting AI_ENABLED=false.
+        """
+        # If explicitly set, use that value
+        if self.AI_ENABLED is not None:
+            return self.AI_ENABLED
+        # Auto-enable if keys are present
+        return bool(self.AZURE_OPENAI_API_KEY and self.AZURE_OPENAI_ENDPOINT)
     
     # Cloud Configuration
     CLOUD_PROVIDER: Optional[str] = None
