@@ -4,11 +4,9 @@ Environment Configuration Generator
 Generates dynamic environment configuration based on platform detection
 """
 
-import os
 import logging
-from typing import Dict, Any
+from typing import Any
 from pathlib import Path
-import yaml
 
 from platform_detector import platform_detector
 
@@ -21,7 +19,7 @@ class EnvironmentConfigurator:
         self.platform_config = platform_detector.get_platform_config()
         self.validation = platform_detector.validate_deployment_environment()
         
-    def generate_sentry_env(self, output_path: Path = None) -> Dict[str, str]:
+    def generate_sentry_env(self, output_path: Path = None) -> dict[str, str]:
         """Generate environment variables for Sentry deployment"""
         
         # Base configuration
@@ -112,7 +110,7 @@ class EnvironmentConfigurator:
         
         return env_config
     
-    def generate_docker_compose_config(self) -> Dict[str, Any]:
+    def generate_docker_compose_config(self) -> dict[str, Any]:
         """Generate Docker Compose configuration based on platform"""
         
         # Base services configuration
@@ -188,7 +186,7 @@ class EnvironmentConfigurator:
         
         return config
     
-    def _get_memory_limits(self) -> Dict[str, str]:
+    def _get_memory_limits(self) -> dict[str, str]:
         """Get memory limits based on available system memory"""
         limits = {}
         
@@ -217,12 +215,12 @@ class EnvironmentConfigurator:
                         "kitnet": "512m",
                         "bridge": "128m"
                     }
-            except (ValueError, IndexError):
+            except (ValueError, IndexError):  # Fall back to defaults if parsing fails
                 pass
         
         return limits
     
-    def _write_env_file(self, env_config: Dict[str, str], output_path: Path):
+    def _write_env_file(self, env_config: dict[str, str], output_path: Path):
         """Write environment configuration to file"""
         try:
             with open(output_path, 'w') as f:

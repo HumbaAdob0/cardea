@@ -241,6 +241,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
     return () => {
       // Don't remove the script as it might be used elsewhere
       // Just cleanup listeners if needed
+
     };
   }, [googleAuthEnabled]);
 

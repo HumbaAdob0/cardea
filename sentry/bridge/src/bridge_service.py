@@ -2,28 +2,33 @@
 """
 Cardea Bridge Service - Service Orchestration and API Gateway
 Optimized for X230-ARCH with Dynamic Asset Discovery
+
+Now includes:
+- Multi-source alert aggregation (KitNET, Suricata, Zeek notices)
+- Zeek notice.log monitoring for behavioral detection
+- Real-time network discovery from Zeek logs
 """
 
 import asyncio
-import json
 import logging
-import sys
 import os
 import httpx
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Optional, Any
 from dataclasses import dataclass, asdict
 from contextlib import asynccontextmanager
 
 import aiofiles
 from fastapi import FastAPI, HTTPException, BackgroundTasks, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 import uvicorn
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+# Import Zeek Notice Monitor
+from zeek_notice_monitor import get_notice_monitor
 
 # --- PLATFORM DETECTION LOGIC (PRESERVED) ---
 
@@ -45,7 +50,8 @@ class EnhancedPlatformDetector:
                     if "docker" in f.read():
                         container_info["is_container"] = True
                         container_info["type"] = "docker"
-        except Exception: pass
+        except OSError:  # Container detection is best-effort
+            pass
         return container_info
 
     def _detect_os(self):
@@ -57,7 +63,8 @@ class EnhancedPlatformDetector:
                     with open("/etc/os-release", "r") as f:
                         for line in f:
                             if line.startswith("NAME="): os_info["distribution"] = line.split("=")[1].strip().strip('"')
-            except Exception: pass
+            except OSError:  # OS detection is best-effort
+                pass
         return os_info
 
     def _detect_network_interfaces(self):
@@ -78,7 +85,8 @@ class EnhancedPlatformDetector:
             import subprocess
             if subprocess.run(["docker", "--version"], capture_output=True).returncode == 0:
                 capabilities["available"] = True
-        except Exception: pass
+        except (OSError, FileNotFoundError):  # Docker detection is best-effort
+            pass
         return capabilities
 
     def get_os_info(self): return {"name": self.os_info.get("distribution", "unknown")}
@@ -105,7 +113,7 @@ class Alert:
     source: str
     event_type: str
     description: str
-    raw_data: Dict[str, Any]
+    raw_data: dict[str, Any]
     confidence: float = 0.0
     status: str = "new"
 
@@ -114,37 +122,118 @@ class AlertRequest(BaseModel):
     severity: str
     event_type: str
     description: str
-    raw_data: Dict[str, Any]
+    raw_data: dict[str, Any]
     confidence: float = 0.0
+
+class SuricataAlertRequest(BaseModel):
+    """Suricata-specific alert format from EVE JSON"""
+    source: str = "suricata"
+    timestamp: Optional[str] = None
+    alert: dict[str, Any]  # signature, category, severity, signature_id
+    network: dict[str, Any]  # src_ip, dest_ip, src_port, dest_port, protocol
+    flow_id: Optional[int] = None
+    
+    # Optional extended fields
+    http: Optional[dict[str, Any]] = None
+    dns: Optional[dict[str, Any]] = None
+    tls: Optional[dict[str, Any]] = None
+    fileinfo: Optional[dict[str, Any]] = None
+
+# MITRE ATT&CK mapping for common Suricata rule categories
+SURICATA_CATEGORY_TO_MITRE = {
+    "A Network Trojan was detected": "T1071",  # Application Layer Protocol
+    "Malware Command and Control Activity Detected": "T1071",
+    "Attempted Administrator Privilege Gain": "T1068",  # Exploitation for Privilege Escalation
+    "Attempted User Privilege Gain": "T1068",
+    "Potential Corporate Privacy Violation": "T1041",  # Exfiltration Over C2 Channel
+    "Web Application Attack": "T1190",  # Exploit Public-Facing Application
+    "Exploit Kit Activity Detected": "T1189",  # Drive-by Compromise
+    "A suspicious filename was detected": "T1204",  # User Execution
+    "Potentially Bad Traffic": "T1571",  # Non-Standard Port
+    "Misc activity": "T1071",
+    "Not Suspicious Traffic": None,  # No MITRE mapping
+    "Unknown Traffic": None,
+}
 
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
-    services: Dict[str, Dict[str, Any]]
-    platform: Dict[str, str]
+    services: dict[str, dict[str, Any]]
+    platform: dict[str, str]
 
 # --- CORE SERVICE LOGIC ---
 
-async def escalate_to_oracle(alert_data: Dict[str, Any]):
+async def escalate_to_oracle(alert_data: dict[str, Any]):
     """Pushes local anomaly evidence to the Azure-powered Oracle Cloud"""
     oracle_url = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000/api/alerts")
     
+    # Normalize alert_type to match Oracle's AlertType enum
+    event_type = alert_data.get("event_type", "unknown")
+    alert_type_map = {
+        "network_anomaly": "network_anomaly",
+        "ids_alert": "ids_alert",
+        "signature_match": "signature_match",
+        "intrusion_detection": "intrusion_detection",
+    }
+    # Handle zeek notice types (zeek_scan, zeek_recon, etc.)
+    if event_type.startswith("zeek_"):
+        alert_type = event_type if event_type in [
+            "zeek_scan", "zeek_recon", "zeek_attack", "zeek_exploit",
+            "zeek_policy", "zeek_intel", "zeek_weird", "zeek_notice"
+        ] else "zeek_notice"
+    else:
+        alert_type = alert_type_map.get(event_type, "unknown")
+    
+    # Extract network context if available
+    network_context = alert_data.get("network", {})
+    if not network_context and "raw_data" in alert_data:
+        raw = alert_data["raw_data"]
+        network_context = {
+            "src_ip": raw.get("src_ip"),
+            "dest_ip": raw.get("dest_ip"),
+            "src_port": raw.get("src_port"),
+            "dest_port": raw.get("dest_port"),
+            "protocol": raw.get("protocol"),
+        }
+    
+    # Extract indicators from raw_data
+    indicators = []
+    if "raw_data" in alert_data:
+        raw = alert_data["raw_data"]
+        if raw.get("mitre_technique"):
+            indicators.append(f"MITRE:{raw['mitre_technique']}")
+        if raw.get("signature"):
+            indicators.append(f"SIG:{raw['signature'][:50]}")
+        if raw.get("src_ip"):
+            indicators.append(f"IP:{raw['src_ip']}")
+    
     async with httpx.AsyncClient() as client:
         payload = {
-            "source": alert_data["source"],
-            "alert_type": alert_data["event_type"],
-            "severity": alert_data["severity"],
-            "title": f"Sentry Alert: {alert_data['event_type'].upper()}",
-            "description": alert_data["description"],
-            "raw_data": alert_data["raw_data"],
+            "source": alert_data.get("source", "bridge"),
+            "alert_type": alert_type,
+            "severity": alert_data.get("severity", "medium"),
+            "title": f"Sentry Alert: {event_type.upper().replace('_', ' ')}",
+            "description": alert_data.get("description", "Security alert from Sentry"),
+            "raw_data": alert_data.get("raw_data", {}),
+            "network_context": network_context,
+            "indicators": indicators,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
         try:
-            response = await client.post(oracle_url, json=payload, timeout=5.0)
-            logger.info(f"☁️ Oracle Cloud Escalation: {response.status_code}")
-            bridge_service.local_stats["escalations"] += 1
+            response = await client.post(oracle_url, json=payload, timeout=10.0)
+            if response.status_code in (200, 201, 202):
+                logger.info(f"☁️ Oracle Cloud Escalation: {response.status_code} ({alert_type})")
+                bridge_service.local_stats["escalations"] += 1
+            elif response.status_code == 422:
+                logger.error(f"❌ Oracle Schema Mismatch: {response.text}")
+            else:
+                logger.warning(f"⚠️ Oracle responded: {response.status_code}")
+        except httpx.TimeoutException:
+            logger.error(f"❌ Oracle Cloud Timeout")
+        except httpx.ConnectError:
+            logger.error(f"❌ Oracle Cloud Unreachable (connection refused)")
         except Exception as e:
-            logger.error(f"❌ Oracle Cloud Unreachable: {e}")
+            logger.error(f"❌ Oracle Cloud Error: {e}")
 
 class BridgeService:
     def __init__(self):
@@ -153,14 +242,23 @@ class BridgeService:
         except Exception:
             self.platform_detector = BasicPlatformDetector()
             
-        self.alerts: List[Alert] = []
-        self.services_status: Dict[str, Dict[str, Any]] = {}
+        self.alerts: list[Alert] = []
+        self.services_status: dict[str, dict[str, Any]] = {}
         
         self.local_stats = {
             "anomaly_score": 0.0,
             "packets_sec": 0,
             "escalations": 0,
             "start_time": datetime.now()
+        }
+        
+        # Suricata-specific statistics
+        self.suricata_stats = {
+            "alerts_received": 0,
+            "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            "by_category": {},
+            "recent_signatures": [],  # Last 20 unique signatures
+            "mitre_techniques": {},   # Count by MITRE technique
         }
 
         self.data_paths = {
@@ -179,7 +277,7 @@ class BridgeService:
                 self.data_paths[service] = Path(f"/tmp/cardea/{service}")
                 self.data_paths[service].mkdir(parents=True, exist_ok=True)
 
-    async def check_service_health(self, service: str) -> Dict[str, Any]:
+    async def check_service_health(self, service: str) -> dict[str, Any]:
         health_info = {"status": "healthy", "last_check": datetime.now().isoformat(), "details": {}}
         if service == "bridge":
             health_info["details"] = {"alerts_in_buffer": len(self.alerts), "uptime": str(datetime.now() - self.local_stats["start_time"])}
@@ -201,7 +299,7 @@ class BridgeService:
             self.local_stats["anomaly_score"] = req.raw_data["score"]
         return alert
 
-    async def get_network_discovery(self) -> Dict[str, Any]:
+    async def get_network_discovery(self) -> dict[str, Any]:
         """Dynamically scans local logs and health to build the map data"""
         devices = []
         links = []
@@ -248,12 +346,51 @@ class BridgeService:
 
 bridge_service = BridgeService()
 
+# --- ZEEK NOTICE INTEGRATION ---
+
+async def handle_zeek_notice_alert(alert_data: dict[str, Any]):
+    """Callback for Zeek notice monitor - injects notices as alerts."""
+    try:
+        req = AlertRequest(
+            source=alert_data['source'],
+            severity=alert_data['severity'],
+            event_type=alert_data['event_type'],
+            description=alert_data['description'],
+            raw_data=alert_data['raw_data'],
+            confidence=alert_data.get('confidence', 0.9),
+        )
+        alert = bridge_service.add_alert(req)
+        
+        # Auto-escalate high/critical Zeek notices to Oracle
+        if alert_data['severity'] in ('high', 'critical'):
+            await escalate_to_oracle(alert_data)
+            
+        logger.info(f"🔔 Zeek notice ingested: {alert.id} ({alert_data['severity']})")
+    except Exception as e:
+        logger.error(f"Failed to process Zeek notice: {e}")
+
+# Initialize Zeek notice monitor with callback
+zeek_notice_monitor = get_notice_monitor(handle_zeek_notice_alert)
+
 # --- FASTAPI APP & UI ROUTES ---
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🌉 Bridge Service Online [X230-ARCH]")
+    
+    # Start Zeek notice monitoring in background
+    notice_task = asyncio.create_task(zeek_notice_monitor.start())
+    logger.info("🔔 Zeek Notice Monitor started")
+    
     yield
+    
+    # Cleanup
+    await zeek_notice_monitor.stop()
+    notice_task.cancel()
+    try:
+        await notice_task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="src/templates")
@@ -293,6 +430,154 @@ async def submit_alert(alert_request: AlertRequest, background_tasks: Background
         logger.error(f"Alert injection failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/v1/alerts/suricata", status_code=status.HTTP_201_CREATED)
+async def submit_suricata_alert(alert_request: SuricataAlertRequest, background_tasks: BackgroundTasks):
+    """
+    Dedicated endpoint for Suricata EVE JSON alerts.
+    Handles Suricata's native format with MITRE ATT&CK enrichment.
+    """
+    try:
+        alert_info = alert_request.alert
+        network_info = alert_request.network
+        
+        # Map Suricata severity (1=high, 2=medium, 3=low) to our format
+        suri_severity = alert_info.get("severity", 3)
+        severity_map = {1: "critical", 2: "high", 3: "medium", 4: "low"}
+        severity = severity_map.get(suri_severity, "medium")
+        
+        # Extract MITRE technique from category
+        category = alert_info.get("category", "Unknown")
+        mitre_technique = SURICATA_CATEGORY_TO_MITRE.get(category)
+        
+        # Build description with context
+        signature = alert_info.get("signature", "Unknown signature")
+        src_ip = network_info.get("src_ip", "unknown")
+        dest_ip = network_info.get("dest_ip", "unknown")
+        dest_port = network_info.get("dest_port", "")
+        protocol = network_info.get("protocol", "TCP")
+        
+        description = f"{signature} | {src_ip} → {dest_ip}:{dest_port} ({protocol})"
+        if mitre_technique:
+            description += f" [MITRE: {mitre_technique}]"
+        
+        # Build raw_data with all available context
+        raw_data = {
+            "signature_id": alert_info.get("signature_id"),
+            "signature": signature,
+            "category": category,
+            "src_ip": src_ip,
+            "dest_ip": dest_ip,
+            "src_port": network_info.get("src_port"),
+            "dest_port": dest_port,
+            "protocol": protocol,
+            "flow_id": alert_request.flow_id,
+            "mitre_technique": mitre_technique,
+        }
+        
+        # Add protocol-specific context if available
+        if alert_request.http:
+            raw_data["http"] = alert_request.http
+        if alert_request.dns:
+            raw_data["dns"] = alert_request.dns
+        if alert_request.tls:
+            raw_data["tls"] = alert_request.tls
+        if alert_request.fileinfo:
+            raw_data["fileinfo"] = alert_request.fileinfo
+        
+        # Create normalized alert
+        normalized = AlertRequest(
+            source="suricata",
+            severity=severity,
+            event_type="ids_alert",
+            description=description,
+            raw_data=raw_data,
+            confidence=0.95 if suri_severity <= 2 else 0.7
+        )
+        
+        alert = bridge_service.add_alert(normalized)
+        
+        # Update Suricata stats
+        bridge_service.suricata_stats["alerts_received"] += 1
+        bridge_service.suricata_stats["by_severity"][severity] = \
+            bridge_service.suricata_stats["by_severity"].get(severity, 0) + 1
+        bridge_service.suricata_stats["by_category"][category] = \
+            bridge_service.suricata_stats["by_category"].get(category, 0) + 1
+        
+        if mitre_technique:
+            bridge_service.suricata_stats["mitre_techniques"][mitre_technique] = \
+                bridge_service.suricata_stats["mitre_techniques"].get(mitre_technique, 0) + 1
+        
+        # Track recent signatures (keep last 20 unique)
+        if signature not in bridge_service.suricata_stats["recent_signatures"]:
+            bridge_service.suricata_stats["recent_signatures"].append(signature)
+            if len(bridge_service.suricata_stats["recent_signatures"]) > 20:
+                bridge_service.suricata_stats["recent_signatures"].pop(0)
+        
+        # Auto-escalate high/critical to Oracle
+        if severity in ("critical", "high"):
+            background_tasks.add_task(escalate_to_oracle, normalized.model_dump())
+        
+        # Sanitize log output to prevent log injection
+        safe_signature = signature[:50].replace('\n', ' ').replace('\r', ' ')
+        safe_severity = severity.replace('\n', ' ').replace('\r', ' ')
+        logger.info(f"🛡️ Suricata alert: {safe_signature}... [{safe_severity}]")
+        return {"status": "accepted", "alert_id": alert.id, "mitre": mitre_technique}
+        
+    except Exception as e:
+        logger.error(f"Suricata alert processing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/suricata-stats")
+async def get_suricata_stats():
+    """Returns Suricata alert statistics and MITRE coverage"""
+    stats = bridge_service.suricata_stats
+    return {
+        "total_alerts": stats["alerts_received"],
+        "by_severity": stats["by_severity"],
+        "by_category": stats["by_category"],
+        "mitre_techniques": stats["mitre_techniques"],
+        "recent_signatures": stats["recent_signatures"],
+        "last_check": datetime.now().isoformat()
+    }
+
+# --- KITNET STATS ENDPOINT ---
+
+# KitNET statistics storage
+kitnet_stats = {
+    "last_report": None,
+    "phase": "unknown",
+    "training_progress": 0.0,
+    "total_processed": 0,
+    "anomalies_detected": 0,
+    "uptime_seconds": 0,
+    "num_autoencoders": 0,
+    "feature_groups": 0,
+    "adaptive_threshold": 0.95,
+}
+
+@app.post("/api/kitnet-stats")
+async def receive_kitnet_stats(data: dict):
+    """Receives periodic stats from KitNET service"""
+    global kitnet_stats
+    kitnet_stats.update(data)
+    kitnet_stats["last_report"] = datetime.now().isoformat()
+    # Sanitize log output - only log numeric value to prevent log injection
+    total_processed = int(data.get('total_processed', 0)) if isinstance(data.get('total_processed'), (int, float)) else 0
+    logger.debug(f"🤖 KitNET stats updated: {total_processed} processed")
+    return {"status": "ok"}
+
+@app.get("/api/kitnet-stats")
+async def get_kitnet_stats():
+    """Returns KitNET AI detection statistics"""
+    return {
+        **kitnet_stats,
+        "detection_rate": (
+            kitnet_stats["anomalies_detected"] / kitnet_stats["total_processed"]
+            if kitnet_stats["total_processed"] > 0 else 0
+        ),
+        "status": "training" if kitnet_stats["phase"] != "DETECT" else "active",
+    }
+
 @app.get("/api/discovery")
 async def discovery_endpoint():
     """Provides dynamic data for the React NetworkMap"""
@@ -312,6 +597,19 @@ async def get_alerts(limit: int = 100):
 @app.get("/api/local-stats")
 async def get_local_stats():
     return bridge_service.local_stats
+
+@app.get("/api/zeek-notices")
+async def get_zeek_notice_stats():
+    """Returns Zeek notice monitoring statistics and recent notices"""
+    stats = zeek_notice_monitor.get_stats()
+    return {
+        "status": "active" if zeek_notice_monitor.running else "stopped",
+        "total_processed": stats["notices_processed"],
+        "by_type": stats["by_type"],
+        "by_severity": stats["by_severity"],
+        "mitre_coverage": len([k for k, v in stats["by_type"].items() if v > 0]),
+        "last_check": datetime.now().isoformat()
+    }
 
 if __name__ == "__main__":
     port = int(os.getenv("BRIDGE_PORT", "8001"))

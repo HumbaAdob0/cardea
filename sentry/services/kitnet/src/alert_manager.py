@@ -4,11 +4,9 @@ Alert Manager for KitNET
 Manages alert sending to Bridge service with robust type handling
 """
 
-import asyncio
 import logging
 import aiohttp
-from typing import Dict, Any, Union
-from datetime import datetime
+from typing import Any, Union
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ class AlertManager:
         self.alert_count = 0
         self.session = None
         
-    async def send_alert(self, score_data: Union[float, Dict[str, Any]], packet_info: Dict[str, Any] = None):
+    async def send_alert(self, score_data: Union[float, dict[str, Any]], packet_info: dict[str, Any] = None):
         """
         Send formatted alert to Bridge service.
         Handles cases where score might be wrapped in a dictionary to prevent TypeErrors.
@@ -30,16 +28,13 @@ class AlertManager:
             if not self.session:
                 self.session = aiohttp.ClientSession()
             
-            # --- TYPE FIX START ---
             # Extract the actual float value from the data passed by KitNET
-            score = 0.0
             if isinstance(score_data, dict):
                 # If it's a dict, try to find 'score' or 'anomaly_score'
                 score = float(score_data.get("score", score_data.get("anomaly_score", 0.0)))
             else:
                 # If it's already a number or string, convert directly
                 score = float(score_data)
-            # --- TYPE FIX END ---
 
             # Align with the endpoint in bridge_service.py
             endpoint = f"{self.bridge_url}/alerts"

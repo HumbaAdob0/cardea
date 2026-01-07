@@ -3,28 +3,23 @@ Azure AI Search Integration for Threat Intelligence RAG
 Provides semantic search over historical threat data
 """
 
+import json
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-import json
+from typing import Any
 
+from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import ResourceNotFoundError
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
+    SearchableField,
+    SearchFieldDataType,
     SearchIndex,
     SimpleField,
-    SearchableField,
-    SearchField,
-    SearchFieldDataType,
-    VectorSearch,
-    HnswAlgorithmConfiguration,
-    VectorSearchProfile,
 )
-from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import ResourceNotFoundError
 
 from config import settings
-from models import AlertType, AlertSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +175,7 @@ class ThreatIntelligenceSearch:
             logger.error(f"Failed to ensure index exists: {e}")
             return False
     
-    async def index_threat(self, threat_data: Dict[str, Any]) -> bool:
+    async def index_threat(self, threat_data: dict[str, Any]) -> bool:
         """
         Index a threat document into Azure Search
         
@@ -231,11 +226,11 @@ class ThreatIntelligenceSearch:
     async def search_similar_threats(
         self,
         query: str,
-        alert_type: Optional[str] = None,
-        severity: Optional[str] = None,
+        alert_type: str | None = None,
+        severity: str | None = None,
         top: int = 5,
         min_score: float = 0.5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Search for similar historical threats
         
@@ -309,7 +304,7 @@ class ThreatIntelligenceSearch:
             logger.error(f"Search failed: {e}")
             return []
     
-    async def get_threat_by_id(self, threat_id: str) -> Optional[Dict[str, Any]]:
+    async def get_threat_by_id(self, threat_id: str) -> dict[str, Any] | None:
         """
         Retrieve a specific threat by ID
         
@@ -387,7 +382,7 @@ class ThreatIntelligenceSearch:
             logger.error(f"Error updating threat occurrences: {e}")
             return False
     
-    async def get_threat_statistics(self) -> Dict[str, Any]:
+    async def get_threat_statistics(self) -> dict[str, Any]:
         """
         Get statistics about indexed threats
         

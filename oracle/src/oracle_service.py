@@ -6,19 +6,26 @@ Includes Redis-based De-duplication and Rate Limiting
 import os
 import logging
 import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+import logging
+import os
+from datetime import datetime, timezone
+from typing import Any
+
 import redis.asyncio as redis
-
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select
 
+from analytics import AlertCorrelator, ThreatAnalyzer
 from config import settings
-from database import get_db, Alert
+from database import Alert, get_db
 from models import (
-    HealthResponse, AlertRequest, AlertResponse, 
-    ThreatAnalysisResponse, SystemStatus, AnalyticsResponse
+    AlertRequest,
+    AlertResponse,
+    AnalyticsResponse,
+    HealthResponse,
+    SystemStatus,
+    ThreatAnalysisResponse,
 )
 from analytics import ThreatAnalyzer, AlertCorrelator
 from fastapi import Depends, status, Body
@@ -68,7 +75,9 @@ async def check_abuse_safeguards(alert: AlertRequest) -> bool:
     current_minute_count = results[1]
 
     if is_duplicate:
-        logger.warning(f"🚫 Dropping duplicate alert from {alert.source}")
+        # Sanitize source to prevent log injection
+        safe_source = str(alert.source)[:50].replace('\n', ' ').replace('\r', ' ')
+        logger.warning(f"🚫 Dropping duplicate alert from {safe_source}")
         return True
 
     if current_minute_count > GLOBAL_MINUTE_LIMIT:
@@ -84,11 +93,13 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         version=settings.VERSION,
         description="Cloud-native security analytics with AI Credit Protection",
+        debug=settings.get_effective_debug(),
     )
     
+    # Configure CORS based on environment
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -294,26 +305,83 @@ def create_app() -> FastAPI:
     
     @app.get("/health", response_model=HealthResponse)
     async def health_check():
+        """
+        Comprehensive health check for all Oracle services.
+        Returns status of: database, redis, Azure OpenAI, Azure AI Search
+        """
+        services = {}
+        overall_healthy = True
+        
+        # 1. Database Health Check
         try:
             async with get_db() as db:
                 await db.execute(text("SELECT 1"))
-            db_status = "healthy"
-            # Check Redis Health
-            await redis_client.ping()
-            redis_status = "healthy"
+            services["database"] = {"status": "healthy", "type": "postgresql"}
         except Exception as e:
-            db_status = f"error: {str(e)}"
-            redis_status = "unreachable"
+            services["database"] = {"status": "unhealthy", "error": str(e)[:100]}
+            overall_healthy = False
+        
+        # 2. Redis Health Check
+        try:
+            await redis_client.ping()
+            services["redis_cache"] = {"status": "healthy"}
+        except Exception as e:
+            services["redis_cache"] = {"status": "unhealthy", "error": str(e)[:100]}
+            overall_healthy = False
+        
+        # 3. Azure OpenAI Health Check
+        if settings.AI_ENABLED and threat_analyzer.ai_client:
+            try:
+                # Lightweight check - just verify client is configured
+                services["azure_openai"] = {
+                    "status": "healthy",
+                    "enabled": True,
+                    "deployment": settings.AZURE_OPENAI_DEPLOYMENT,
+                    "endpoint": settings.AZURE_OPENAI_ENDPOINT[:50] + "..." if settings.AZURE_OPENAI_ENDPOINT else None
+                }
+            except Exception as e:
+                services["azure_openai"] = {"status": "degraded", "error": str(e)[:100]}
+        else:
+            services["azure_openai"] = {
+                "status": "disabled",
+                "enabled": False,
+                "reason": "AI_ENABLED=false or missing API key"
+            }
+        
+        # 4. Azure AI Search Health Check
+        if threat_analyzer.search_service and threat_analyzer.search_service.search_client:
+            services["azure_search"] = {
+                "status": "healthy",
+                "enabled": True,
+                "index": settings.AZURE_SEARCH_INDEX_NAME
+            }
+        else:
+            services["azure_search"] = {
+                "status": "disabled",
+                "enabled": False,
+                "reason": "Missing Azure Search credentials"
+            }
+        
+        # 5. Analytics Service
+        services["analytics"] = {
+            "status": "healthy",
+            "ai_powered": threat_analyzer.ai_client is not None,
+            "rag_enabled": threat_analyzer.search_service.search_client is not None if threat_analyzer.search_service else False
+        }
+        
+        # Determine overall status
+        if overall_healthy:
+            status = "healthy"
+        elif services["database"]["status"] == "healthy":
+            status = "degraded"  # Core DB works but other services have issues
+        else:
+            status = "unhealthy"
             
         return HealthResponse(
-            status="healthy" if db_status == "healthy" and redis_status == "healthy" else "degraded",
+            status=status,
             timestamp=datetime.now(timezone.utc),
             version=settings.VERSION,
-            services={
-                "database": {"status": db_status},
-                "redis_cache": {"status": redis_status},
-                "analytics": {"status": "healthy", "models_loaded": True}
-            },
+            services=services,
             system=SystemStatus(
                 deployment_env=settings.DEPLOYMENT_ENVIRONMENT,
                 alerts_processed=await get_alerts_count(),
@@ -368,13 +436,19 @@ def create_app() -> FastAPI:
             
         except Exception as e:
             logger.error(f"Failed to process alert: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/analytics", response_model=AnalyticsResponse)
     async def get_analytics(time_range: str = "24h"):
         try:
             async with get_db() as db:
                 analytics_data = await calculate_analytics(db, time_range)
+            
+            # Generate AI insight based on current threat landscape
+            ai_insight = await generate_ai_insight(
+                analytics_data, 
+                threat_analyzer
+            )
             
             return AnalyticsResponse(
                 total_alerts=analytics_data.get("total_alerts", 0),
@@ -383,15 +457,142 @@ def create_app() -> FastAPI:
                 generated_at=datetime.now(timezone.utc),
                 time_range=time_range,
                 alerts_by_severity=analytics_data.get("severity_stats") or {},
-                alerts_by_type={},
+                alerts_by_type=analytics_data.get("type_stats") or {},
                 top_threats=[],
-                trend_data=[]
+                trend_data=[],
+                ai_insight=ai_insight
             )
         except Exception as e:
             logger.error(f"Analytics Error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
     
     return app
+
+async def generate_ai_insight(analytics_data: dict[str, Any], threat_analyzer: ThreatAnalyzer):
+    """Generate human-readable AI insight based on current threat data"""
+    from models import AIInsight
+    
+    total_alerts = analytics_data.get("total_alerts", 0)
+    risk_score = analytics_data.get("risk_score", 0.0)
+    severity_stats = analytics_data.get("severity_stats", {})
+    alerts = analytics_data.get("alerts", [])
+    
+    # Count critical/high alerts
+    critical_count = severity_stats.get("critical", 0)
+    high_count = severity_stats.get("high", 0)
+    
+    # Try AI-powered insight generation
+    if threat_analyzer.ai_client and settings.AI_ENABLED:
+        try:
+            # Prepare context for AI
+            context = {
+                "total_alerts": total_alerts,
+                "risk_score": round(risk_score, 3),
+                "severity_breakdown": severity_stats,
+                "recent_alert_types": list({a.get("alert_type", "unknown") for a in alerts[:10]}),
+                "critical_alerts": critical_count,
+                "high_alerts": high_count,
+            }
+            
+            prompt = """Based on the current security telemetry from the Cardea network monitoring system, provide a brief security briefing for a non-technical business owner.
+
+Your response MUST be in this exact JSON format:
+{
+  "summary": "One sentence summary of the overall security status",
+  "what_happened": "2-3 sentences explaining what the system detected in plain language",
+  "why_it_matters": "2-3 sentences about the business impact",
+  "recommended_actions": ["Action 1", "Action 2", "Action 3"],
+  "confidence": 0.85
+}
+
+Guidelines:
+- If risk is low (<20%) and no critical alerts: Be reassuring
+- If risk is moderate (20-50%): Note areas of concern but don't alarm
+- If risk is high (>50%) or critical alerts exist: Be clear about urgency
+- Always provide actionable next steps"""
+
+            ai_response = await threat_analyzer.reason_with_ai(
+                prompt=prompt,
+                context=context,
+                system_role="You are a friendly cybersecurity advisor who explains technical threats in simple business terms."
+            )
+            
+            if ai_response:
+                import re
+                import json
+                # Extract JSON from response
+                json_match = re.search(r'```json\s*(.*?)\s*```', ai_response, re.DOTALL)
+                if json_match:
+                    insight_data = json.loads(json_match.group(1))
+                else:
+                    insight_data = json.loads(ai_response)
+                
+                return AIInsight(
+                    summary=insight_data.get("summary", "Security analysis complete."),
+                    what_happened=insight_data.get("what_happened", ""),
+                    why_it_matters=insight_data.get("why_it_matters", ""),
+                    recommended_actions=insight_data.get("recommended_actions", []),
+                    confidence=insight_data.get("confidence", 0.8),
+                    ai_powered=True
+                )
+                
+        except Exception as e:
+            logger.warning(f"AI insight generation failed: {e}. Using deterministic fallback.")
+    
+    # Deterministic fallback
+    if total_alerts == 0:
+        return AIInsight(
+            summary="Your network is quiet. No security alerts detected.",
+            what_happened="The Cardea monitoring system has been actively scanning your network and found no suspicious activity during this time period.",
+            why_it_matters="This is a good sign! Your security measures appear to be working effectively.",
+            recommended_actions=[
+                "Continue regular security monitoring",
+                "Ensure all software is up to date",
+                "Review access permissions periodically"
+            ],
+            confidence=0.95,
+            ai_powered=False
+        )
+    elif critical_count > 0 or high_count > 0:
+        return AIInsight(
+            summary=f"⚠️ Action Required: {critical_count + high_count} high-priority security alerts detected.",
+            what_happened=f"Your network monitoring system has detected {critical_count} critical and {high_count} high severity events. These may indicate attempted unauthorized access, malware activity, or suspicious network behavior.",
+            why_it_matters="High-severity alerts can indicate active threats that may compromise your data, disrupt operations, or expose your business to liability. Prompt attention is recommended.",
+            recommended_actions=[
+                "Review the critical alerts in the feed below immediately",
+                "Check if any unusual login attempts occurred",
+                "Consider temporarily isolating affected systems if compromise is suspected",
+                "Document findings for potential incident response"
+            ],
+            confidence=0.85,
+            ai_powered=False
+        )
+    elif risk_score > 0.3:
+        return AIInsight(
+            summary=f"Moderate activity detected: {total_alerts} alerts with elevated risk score.",
+            what_happened=f"The system detected {total_alerts} security events. While none are critical, the overall pattern suggests elevated network activity that warrants attention.",
+            why_it_matters="Moderate-risk events often represent reconnaissance or probing activity. Addressing them early can prevent escalation to more serious threats.",
+            recommended_actions=[
+                "Review the alert feed for patterns",
+                "Verify all detected hosts are authorized devices",
+                "Consider tightening firewall rules if unusual traffic sources are identified"
+            ],
+            confidence=0.8,
+            ai_powered=False
+        )
+    else:
+        return AIInsight(
+            summary=f"Normal operations: {total_alerts} low-priority events logged.",
+            what_happened=f"Your network monitoring detected {total_alerts} events, all classified as low severity. This is typical background activity for an active network.",
+            why_it_matters="Low-severity alerts help you understand your network's normal behavior patterns. No immediate action is required.",
+            recommended_actions=[
+                "Continue normal monitoring",
+                "Review alerts periodically for patterns",
+                "Use this data to establish baseline behavior"
+            ],
+            confidence=0.9,
+            ai_powered=False
+        )
 
 async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyzer, correlator: AlertCorrelator):
     """AI analysis with strict token budgeting"""
@@ -399,7 +600,8 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
         async with get_db() as db:
             result = await db.execute(select(Alert).where(Alert.id == alert_id))
             alert = result.scalar_one_or_none()
-            if not alert: return
+            if not alert:
+                return
             
             # --- AI BRAIN WITH TOKEN CAPS ---
             threat_score = 0.4
@@ -431,10 +633,25 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
     except Exception as e:
         logger.error(f"Background processing failed for alert {alert_id}: {e}")
 
-async def calculate_analytics(db, time_range: str) -> Dict[str, Any]:
+async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
     stmt = select(Alert).order_by(Alert.timestamp.desc()).limit(50)
     result = await db.execute(stmt)
     alerts_list = result.scalars().all()
+    
+    # Serialize alerts for JSON response (Dashboard compatibility)
+    serialized_alerts = []
+    for alert in alerts_list:
+        serialized_alerts.append({
+            "id": alert.id,
+            "source": alert.source,
+            "alert_type": alert.alert_type,
+            "severity": alert.severity,
+            "title": alert.title,
+            "description": alert.description,
+            "timestamp": alert.timestamp.isoformat() if alert.timestamp else None,
+            "threat_score": alert.threat_score,
+            "raw_data": alert.raw_data,
+        })
     
     count_stmt = select(func.count()).select_from(Alert)
     count_result = await db.execute(count_stmt)
@@ -451,7 +668,7 @@ async def calculate_analytics(db, time_range: str) -> Dict[str, Any]:
     return {
         "total_alerts": total,
         "risk_score": float(avg_risk),
-        "alerts": alerts_list,
+        "alerts": serialized_alerts,
         "severity_stats": severity_map
     }
 
@@ -460,4 +677,5 @@ async def get_alerts_count() -> int:
         async with get_db() as db:
             result = await db.execute(select(func.count()).select_from(Alert))
             return result.scalar() or 0
-    except Exception: return 0
+    except Exception:
+        return 0

@@ -4,19 +4,19 @@ JWT-based authentication system with role-based access control
 Supports both traditional username/password and OAuth 2.0 (Microsoft, Google)
 """
 
-import os
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
-from jose import JWTError, jwt
-import secrets
 
-from models import User, Token, TokenData
-from database import get_db
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
 from config import settings
+from database import get_db
+from models import TokenData, User
 
 # Import OAuth authentication services
 try:
@@ -54,9 +54,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
@@ -86,10 +86,11 @@ def verify_token(token: str) -> TokenData:
 async def get_user(username: str) -> Optional[User]:
     """Get user from database"""
     try:
+        from sqlalchemy import text
         async with get_db() as db:
             result = await db.execute(
-                "SELECT * FROM users WHERE username = %s AND is_active = true",
-                (username,)
+                text("SELECT * FROM users WHERE username = :username AND is_active = true"),
+                {"username": username}
             )
             user_data = result.fetchone()
             
@@ -110,18 +111,19 @@ async def get_user(username: str) -> Optional[User]:
 async def authenticate_user(username: str, password: str) -> Optional[User]:
     """Authenticate user credentials"""
     try:
+        from sqlalchemy import text
         async with get_db() as db:
             result = await db.execute(
-                "SELECT * FROM users WHERE username = %s AND is_active = true",
-                (username,)
+                text("SELECT * FROM users WHERE username = :username AND is_active = true"),
+                {"username": username}
             )
             user_data = result.fetchone()
             
             if user_data and verify_password(password, user_data.hashed_password):
                 # Update last login
                 await db.execute(
-                    "UPDATE users SET last_login = %s WHERE username = %s",
-                    (datetime.utcnow(), username)
+                    text("UPDATE users SET last_login = :last_login WHERE username = :username"),
+                    {"last_login": datetime.now(timezone.utc), "username": username}
                 )
                 await db.commit()
                 
@@ -367,7 +369,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-def check_permissions(required_roles: List[str]):
+def check_permissions(required_roles: list[str]):
     """Dependency to check if user has required roles"""
     def permission_checker(current_user: User = Depends(get_current_active_user)):
         if not any(role in current_user.roles for role in required_roles):
@@ -383,7 +385,7 @@ async def create_user(
     email: str,
     password: str,
     full_name: Optional[str] = None,
-    roles: Optional[List[str]] = None
+    roles: Optional[list[str]] = None
 ) -> User:
     """Create a new user"""
     try:
@@ -450,7 +452,11 @@ async def create_default_admin():
                     roles=["admin", "user"]
                 )
                 
-                logger.warning(f"Created default admin user with password: {admin_password}")
+                # Log creation without exposing the password
+                if os.getenv("ADMIN_PASSWORD"):
+                    logger.info("Created default admin user with password from ADMIN_PASSWORD env var")
+                else:
+                    logger.warning("Created default admin user with auto-generated password. Set ADMIN_PASSWORD env var to specify.")
                 logger.warning("Please change the admin password immediately!")
                 
     except Exception as e:

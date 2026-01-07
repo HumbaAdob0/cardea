@@ -6,8 +6,8 @@ Monitors and reports status of all Sentry services
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any
+from datetime import datetime
+from typing import Any
 import aiohttp
 
 logger = logging.getLogger(__name__)
@@ -98,14 +98,14 @@ class SentryStatus:
             logger.warning(f"Redis health check failed: {e}")
             self.service_status["redis"]["healthy"] = False
     
-    async def get_service_status(self) -> Dict[str, bool]:
+    async def get_service_status(self) -> dict[str, bool]:
         """Get simple service status"""
         return {
             service: status["healthy"] 
             for service, status in self.service_status.items()
         }
     
-    async def get_detailed_status(self) -> Dict[str, Any]:
+    async def get_detailed_status(self) -> dict[str, Any]:
         """Get detailed Sentry status"""
         uptime = datetime.now() - self.start_time
         
@@ -124,7 +124,7 @@ class SentryStatus:
             }
         }
     
-    async def get_network_status(self) -> Dict[str, Any]:
+    async def get_network_status(self) -> dict[str, Any]:
         """Get network monitoring status"""
         return {
             "monitoring_active": True,  # Would be from actual monitoring

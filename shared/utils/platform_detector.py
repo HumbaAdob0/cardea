@@ -8,7 +8,7 @@ import os
 import platform
 import subprocess
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Optional, Any
 from pathlib import Path
 import json
 
@@ -23,7 +23,7 @@ class PlatformDetector:
         self.docker_capabilities = self._detect_docker_capabilities()
         self.hardware_info = self._detect_hardware()
         
-    def _detect_os(self) -> Dict[str, str]:
+    def _detect_os(self) -> dict[str, str]:
         """Detect operating system and distribution"""
         os_info = {
             "system": platform.system(),
@@ -58,7 +58,7 @@ class PlatformDetector:
         
         return os_info
     
-    def _detect_network_interfaces(self) -> List[Dict[str, Any]]:
+    def _detect_network_interfaces(self) -> list[dict[str, Any]]:
         """Detect available network interfaces"""
         interfaces = []
         
@@ -92,7 +92,7 @@ class PlatformDetector:
             
         return interfaces
     
-    def _parse_ip_link_output(self, output: str) -> List[Dict[str, Any]]:
+    def _parse_ip_link_output(self, output: str) -> list[dict[str, Any]]:
         """Parse 'ip link show' output"""
         interfaces = []
         
@@ -129,7 +129,7 @@ class PlatformDetector:
         
         return interfaces
     
-    def _parse_ifconfig_output(self, output: str) -> List[Dict[str, Any]]:
+    def _parse_ifconfig_output(self, output: str) -> list[dict[str, Any]]:
         """Parse ifconfig output as fallback"""
         interfaces = []
         
@@ -146,7 +146,7 @@ class PlatformDetector:
         
         return interfaces
     
-    def _detect_docker_capabilities(self) -> Dict[str, Any]:
+    def _detect_docker_capabilities(self) -> dict[str, Any]:
         """Detect Docker capabilities and configuration"""
         capabilities = {
             "available": False,
@@ -197,7 +197,7 @@ class PlatformDetector:
         
         return capabilities
     
-    def _detect_hardware(self) -> Dict[str, Any]:
+    def _detect_hardware(self) -> dict[str, Any]:
         """Detect hardware information"""
         hardware = {
             "cpu_count": os.cpu_count(),
@@ -262,7 +262,7 @@ class PlatformDetector:
         
         return None
     
-    def get_platform_config(self) -> Dict[str, Any]:
+    def get_platform_config(self) -> dict[str, Any]:
         """Generate platform-specific configuration"""
         config = {
             "platform": self.os_info,
@@ -278,7 +278,7 @@ class PlatformDetector:
         
         return config
     
-    def _get_platform_optimizations(self) -> Dict[str, Any]:
+    def _get_platform_optimizations(self) -> dict[str, Any]:
         """Get platform-specific optimizations"""
         optimizations = {
             "packet_capture_method": "standard",
@@ -308,7 +308,7 @@ class PlatformDetector:
         
         return optimizations
     
-    def validate_environment(self) -> Dict[str, Any]:
+    def validate_environment(self) -> dict[str, Any]:
         """Validate environment for Sentry deployment"""
         validation = {
             "ready": True,
@@ -358,7 +358,7 @@ class PlatformDetector:
             if result.returncode == 0 and "cap_net_raw" in result.stdout.lower():
                 return True
                 
-        except Exception:
+        except OSError:  # Capability check is best-effort
             pass
         
         return False
@@ -366,10 +366,10 @@ class PlatformDetector:
 # Global platform detector instance
 platform_detector = PlatformDetector()
 
-def get_platform_config() -> Dict[str, Any]:
+def get_platform_config() -> dict[str, Any]:
     """Get current platform configuration"""
     return platform_detector.get_platform_config()
 
-def validate_deployment_environment() -> Dict[str, Any]:
+def validate_deployment_environment() -> dict[str, Any]:
     """Validate environment for deployment"""
     return platform_detector.validate_environment()
