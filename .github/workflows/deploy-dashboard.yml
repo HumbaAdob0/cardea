@@ -1,3 +1,13 @@
+name: Deploy Dashboard to Azure Static Web App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'dashboard/**'
+  workflow_dispatch:
+
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -24,33 +34,48 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
-      - name: Build Project
+      # THIS IS THE CRITICAL DEBUGGING STEP
+      - name: Build Project & Debug
         working-directory: dashboard
         run: |
-          echo "🔹 Starting Build..."
-          npm run build
+          echo "🔹 --- DEBUG START ---"
+          echo "🔹 Current Directory: $(pwd)"
           
-          echo "🔹 content of dashboard root:"
+          echo "🔹 Listing dashboard root BEFORE build:"
           ls -la
           
-          echo "🔹 Copying config file..."
-          # We use -v (verbose) to see the confirmation in logs
-          cp -v staticwebapp.config.json dist/
+          echo "🔹 Running Build..."
+          npm run build
           
-          echo "🔹 VERIFYING dist folder content (Critical Step):"
+          echo "🔹 Listing dashboard root AFTER build:"
+          ls -la
+          
+          echo "🔹 Checking if 'dist' folder exists..."
+          if [ -d "dist" ]; then
+              echo "✅ 'dist' folder found."
+              echo "🔹 Content of 'dist' folder:"
+              ls -la dist/
+          else
+              echo "❌ ERROR: 'dist' folder NOT found! Vite might be building to 'build' or 'public'?"
+              exit 1
+          fi
+
+          echo "🔹 Forcing copy of config file..."
+          # We copy explicitly to dist/ to ensure it exists
+          cp -v staticwebapp.config.json dist/ || echo "❌ Failed to copy config file! Does it exist in root?"
+
+          echo "🔹 VERIFYING FINAL CONTENT OF DIST:"
           ls -la dist/
           
-          echo "🔹 Checking if config exists in dist:"
-          if [ -f "dist/staticwebapp.config.json" ]; then
-            echo "✅ SUCCESS: Config file found in dist!"
-          else
-            echo "❌ ERROR: Config file MISSING from dist!"
+          # Fail the build if the file is still missing
+          if [ ! -f "dist/staticwebapp.config.json" ]; then
+            echo "❌ CRITICAL ERROR: staticwebapp.config.json is MISSING from dist!"
             exit 1
           fi
+          echo "✅ SUCCESS: Config file is present. Proceeding to deploy."
         env:
           VITE_ORACLE_URL: ${{ vars.ORACLE_URL }}
 
-      # 1. Log in via OIDC (This works now!)
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -58,29 +83,27 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # 2. NEW STEP: Fetch the token dynamically
       - name: Get Fresh Deployment Token
         id: get_token
         run: |
-          # Find the Static Web App name in your resource group
-          # We assume the Resource Group is 'rg-cardea-prod' based on your previous screenshots
-          SWA_NAME=$(az staticwebapp list --resource-group rg-cardea-prod --query "[0].name" -o tsv)
+          # Ensure this matches your actual Resource Group Name
+          # Based on your logs, it was 'rg-cardea-oracle' initially, but we used 'rg-cardea-prod' later.
+          # I will use 'rg-cardea-prod' based on your recent successful attempts.
+          # IF THIS FAILS, CHANGE TO 'rg-cardea-oracle'
+          RG_NAME="rg-cardea-prod" 
           
-          echo "Found Static Web App: $SWA_NAME"
+          echo "🔹 Fetching token for Resource Group: $RG_NAME"
+          SWA_NAME=$(az staticwebapp list --resource-group $RG_NAME --query "[0].name" -o tsv)
+          echo "🔹 Found App Name: $SWA_NAME"
           
-          # Fetch the deployment token
-          TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group rg-cardea-prod --query "properties.apiKey" -o tsv)
-          
-          # Securely pass it to the next step
+          TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group $RG_NAME --query "properties.apiKey" -o tsv)
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      # 3. Deploy using the fresh token
       - name: Deploy to Azure Static Web Apps
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          # Use the token we just fetched
           azure_static_web_apps_api_token: ${{ steps.get_token.outputs.token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
