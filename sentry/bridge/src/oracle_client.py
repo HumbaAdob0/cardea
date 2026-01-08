@@ -6,20 +6,30 @@ Handles communication with Oracle cloud service
 
 import asyncio
 import logging
+import os
 import aiohttp
-from typing import Any
+from typing import Any, Dict
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 class OracleClient:
     """Client for communicating with Oracle cloud service"""
     
-    def __init__(self, oracle_url: str):
+    def __init__(self, oracle_url: str, api_key: str = None):
         self.oracle_url = oracle_url
+        self.api_key = api_key or os.getenv("ORACLE_API_KEY")
         self.session = None
         self.connection_attempts = 0
         self.last_successful_ping = None
+        
+    def _get_headers(self) -> Dict[str, str]:
+        """Get headers for Oracle API requests"""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["X-Sentry-API-Key"] = self.api_key
+        return headers
         
     async def escalate_anomaly(self, alert_data: Dict[str, Any]):
         """Escalate high-score anomaly to Oracle with evidence snapshot"""
@@ -119,7 +129,7 @@ class OracleClient:
             return None
     
     async def _send_to_oracle(self, data: Dict[str, Any]):
-        """Send data to Oracle service"""
+        """Send data to Oracle service with authentication"""
         try:
             if not self.session:
                 self.session = aiohttp.ClientSession()
@@ -127,6 +137,7 @@ class OracleClient:
             async with self.session.post(
                 self.oracle_url,
                 json=data,
+                headers=self._get_headers(),
                 timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
                 
@@ -161,6 +172,7 @@ class OracleClient:
             
             async with self.session.get(
                 ping_url,
+                headers=self._get_headers(),
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
                 

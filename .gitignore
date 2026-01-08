@@ -1,33 +1,123 @@
-# Project Cardea - Gitignore
+# ============================================
+# Project Cardea - Comprehensive Gitignore
 # Security-focused exclusions for cybersecurity platform
+# ============================================
 
-# Environment variables and secrets
+# ============================================
+# CREDENTIALS & SECRETS (CRITICAL - NEVER COMMIT)
+# ============================================
+# Environment files
 .env
-.env.local
-.env.production
-.env.staging
+.env.*
+!.env.example
+!.env.template
+*.env
+
+# Private keys and certificates
 *.pem
 *.key
 *.crt
-secrets/
-config/secrets/
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.cer
+*.der
 
-# Development containers and volumes
-.devcontainer/
-docker-compose.override.yml
-volumes/
-data/
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.ppk
 
-# Language-specific
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# API keys and tokens
+**/secrets/
+**/credentials/
+*.secret
+*.secrets
+*secret*.json
+*credentials*.json
+service-account*.json
+google-credentials*.json
+azure-credentials*.json
+
+# AWS
+.aws/
+aws-credentials
+.boto
+
+# Azure
+.azure/
+azure.json
+servicePrincipal.json
+
+# GCP
+gcloud/
+application_default_credentials.json
+
+# Terraform sensitive files
+*.tfvars
+!*.tfvars.example
+terraform.tfstate
+terraform.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Kubernetes secrets
+*kubeconfig*
+*.kubeconfig
+
+# ============================================
+# BULKY DIRECTORIES (node_modules, venv, etc.)
+# ============================================
+# Node.js
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+bower_components/
+
+# Python virtual environments
+.venv/
+venv/
+env/
 .Python
+virtualenv/
+.pyenv/
+
+# Package manager caches
+.cache/
+.pip-cache/
+pip-cache/
+.yarn-cache/
+
+# ============================================
+# BUILD OUTPUTS & COMPILED FILES
+# ============================================
+# General build directories
 build/
-develop-eggs/
 dist/
+out/
+target/
+bin/
+*.out
+
+# Python compiled
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -37,111 +127,309 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
+*.manifest
+*.spec
+
+# Node.js/TypeScript compiled
+*.js.map
+*.d.ts.map
+.next/
+.nuxt/
+.output/
+.vuepress/dist
+.docusaurus/
+.serverless/
+.fusebox/
+dist-ssr/
+*.tsbuildinfo
+
+# Docker build cache
+.docker/
+
+# ============================================
+# TESTING & COVERAGE
+# ============================================
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
-.venv
-venv/
-env/
+.tox/
+.nox/
+coverage/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+nosetests.xml
+junit.xml
+test-results/
+test-output/
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.npm
-.eslintcache
-.next/
-out/
-.nuxt/
-dist/
+# Playwright/Cypress
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+cypress/videos/
+cypress/screenshots/
 
-# IDEs and editors
-.vscode/settings.json
-.vscode/launch.json
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Logs
+# ============================================
+# LOGS & RUNTIME DATA
+# ============================================
 logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Network monitoring data (potentially sensitive)
-*.pcap
-*.pcapng
-zeek-logs/
-suricata-logs/
-network-data/
-
-# AI model artifacts
-models/
-*.model
-*.weights
-checkpoints/
-
-# Database
-# (PostgreSQL only - no local database files)
-
-# Terraform
-*.tfstate
-*.tfstate.*
-.terraform/
-.terraform.lock.hcl
-
-# Cloud provider specific
-.azure/
-.aws/
-
-# py env
-.venv
-
-# dashboard
-# Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.pnpm-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-# Editor directories and files
-.vscode
-.vscode/*
+# ============================================
+# NETWORK MONITORING DATA (SENSITIVE + BULKY)
+# ============================================
+# Packet captures (can be 10GB+)
+*.pcap
+*.pcapng
+*.cap
+*.snoop
+*.5vw
+
+# Zeek logs
+zeek-logs/
+zeek_logs/
+**/zeek/logs/
+**/current/
+**/spool/
+
+# Suricata logs
+suricata-logs/
+suricata_logs/
+**/suricata/logs/
+eve.json
+fast.log
+stats.log
+
+# KitNET data
+kitnet-data/
+*.model
+*.weights
+
+# Generic network data
+network-data/
+captures/
+traffic/
+
+# ============================================
+# SENTRY DATA DIRECTORY (CAN BE 100GB+)
+# ============================================
+sentry/data/
+!sentry/data/README.md
+
+# ============================================
+# DATABASE FILES
+# ============================================
+*.sqlite
+*.sqlite3
+*.db
+*.mdb
+*.accdb
+*.sql.gz
+*.dump
+data/*.sql
+postgresql-data/
+mysql-data/
+mongo-data/
+redis-data/
+
+# Docker volumes (database data)
+volumes/
+docker-volumes/
+
+# ============================================
+# AI/ML MODEL ARTIFACTS (CAN BE GIGABYTES)
+# ============================================
+models/
+checkpoints/
+*.model
+*.h5
+*.hdf5
+*.onnx
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.joblib
+*.safetensors
+wandb/
+mlruns/
+.neptune/
+
+# ============================================
+# IDE & EDITOR FILES
+# ============================================
+# VSCode (keep extensions.json for team consistency)
+.vscode/
 !.vscode/extensions.json
-.idea
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# Vim/Neovim
+*.swp
+*.swo
+*.swn
+*~
+.netrwhist
+Session.vim
+Sessionx.vim
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ============================================
+# OS GENERATED FILES
+# ============================================
+# macOS
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon?
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# TEMPORARY & CACHE FILES
+# ============================================
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.cache
+.eslintcache
+.stylelintcache
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# ============================================
+# DOCUMENTATION BUILD (REGENERATABLE)
+# ============================================
+docs/_build/
+site/
+.docz/
+.storybook-out/
+storybook-static/
+
+# ============================================
+# MISCELLANEOUS
+# ============================================
+# Local development overrides
+docker-compose.override.yml
+docker-compose.local.yml
+*.local
+*.local.*
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Profiling
+*.prof
+*.lprof
+.prof/
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# Lock files (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# poetry.lock
+# Pipfile.lock
+
+# ============================================
+# PROJECT-SPECIFIC EXCLUSIONS
+# ============================================
+# Oracle local data
+oracle/data/
+oracle/logs/
+
+# Dashboard build outputs (regeneratable)
+dashboard/dist/
+dashboard/.vite/
+
+# Sentry persistent data
+sentry/bridge/data/
+sentry/services/*/data/
+
+# Infrastructure state (handled above in Terraform section)
+infrastructure/.terraform/
+
+# Scripts output
+scripts/output/
+scripts/*.log

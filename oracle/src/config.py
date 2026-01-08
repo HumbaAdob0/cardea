@@ -53,7 +53,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Sentry Integration
-    SENTRY_WEBHOOK_TOKEN: str = "sentry-webhook-token"
+    SENTRY_API_KEY: Optional[str] = Field(
+        default=None,
+        description="API key for Sentry-to-Oracle authentication (set in production)"
+    )
+    SENTRY_REQUIRE_AUTH: bool = Field(
+        default=False,
+        description="Whether to require API key authentication from Sentry (enable in production)"
+    )
     
     # Alert Processing
     MAX_ALERTS_PER_BATCH: int = 100

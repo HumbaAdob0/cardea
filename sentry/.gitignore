@@ -1,10 +1,48 @@
-# Sentry data directories - DO NOT COMMIT (can be 100GB+)
+# ============================================
+# Sentry Edge Device - Gitignore
+# Network monitoring data & credentials
+# ============================================
+
+# DATA DIRECTORIES - NEVER COMMIT (can be 100GB+)
 data/
-*.log
+!data/README.md
+bridge/data/
+services/*/data/
+
+# Network captures (sensitive + bulky)
 *.pcap
+*.pcapng
+*.cap
+
+# Zeek output
+**/zeek/logs/
+**/current/
+**/spool/
+
+# Suricata output
+eve.json
+fast.log
+stats.log
+**/suricata/logs/
+
+# KitNET models
+*.model
+*.weights
+*.pkl
+
+# Logs
+*.log
+logs/
+
+# Credentials
+.env
+*.env
+!.env.template
+!.env.example
 
 # Docker
 .docker/
+docker-compose.override.yml
 
 # Python
 __pycache__/
@@ -16,6 +54,8 @@ venv/
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
 
 # OS
 .DS_Store

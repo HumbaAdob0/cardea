@@ -97,6 +97,7 @@ services:
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ORACLE_WEBHOOK_URL=${ORACLE_WEBHOOK_URL:-http://cardea-oracle:8000/api/alerts}
+      - ORACLE_API_KEY=${ORACLE_API_KEY:-}
       - SENTRY_ID=${SENTRY_ID:-sentry_001}
       - ALERT_THRESHOLD=${ALERT_THRESHOLD:-0.95}
     networks:

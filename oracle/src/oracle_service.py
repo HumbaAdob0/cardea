@@ -9,10 +9,10 @@ import logging
 import os
 import re
 from datetime import datetime, timezone, timedelta
-from typing import Any
+from typing import Any, Optional
 
 import redis.asyncio as redis
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 
@@ -332,8 +332,23 @@ def create_app() -> FastAPI:
     async def receive_alert(
         alert_request: AlertRequest, 
         background_tasks: BackgroundTasks,
+        x_sentry_api_key: Optional[str] = Header(None, alias="X-Sentry-API-Key"),
     ):
-        """Receive alerts with Abuse Prevention layer"""
+        """Receive alerts from Sentry edge devices with optional authentication"""
+        # Validate API key if required
+        if settings.SENTRY_REQUIRE_AUTH:
+            if not x_sentry_api_key:
+                raise HTTPException(
+                    status_code=401, 
+                    detail="Missing X-Sentry-API-Key header"
+                )
+            if x_sentry_api_key != settings.SENTRY_API_KEY:
+                logger.warning(f"Invalid Sentry API key from source: {alert_request.source}")
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Invalid API key"
+                )
+        
         try:
             # --- LAYER 1: ABUSE PREVENTION ---
             if await check_abuse_safeguards(alert_request):
