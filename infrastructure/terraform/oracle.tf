@@ -220,22 +220,24 @@ resource "azurerm_container_app" "oracle" {
         secret_name = "sentry-api-key"
       }
 
-      # Liveness probe
+      # Liveness probe - checks if container is alive
       liveness_probe {
-        transport             = "HTTP"
-        path                  = "/health"
-        port                  = 8000
-        initial_delay_seconds = 10
-        interval_seconds      = 30
+        transport        = "HTTP"
+        path             = "/health"
+        port             = 8000
+        interval_seconds = 30
+        timeout          = 5
+        failure_count_threshold = 3
       }
 
-      # Readiness probe
+      # Readiness probe - checks if container is ready to receive traffic
       readiness_probe {
-        transport             = "HTTP"
-        path                  = "/health"
-        port                  = 8000
-        initial_delay_seconds = 5
-        interval_seconds      = 10
+        transport        = "HTTP"
+        path             = "/health"
+        port             = 8000
+        interval_seconds = 10
+        timeout          = 3
+        failure_count_threshold = 3
       }
     }
   }
