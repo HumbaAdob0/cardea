@@ -68,12 +68,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 transition-all"
       >
         {/* Avatar */}
-        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-[10px] font-bold text-white">
+        <div className="w-6 h-6 rounded-full bg-linear-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-[10px] font-bold text-white">
           {getInitials()}
         </div>
         
         {/* Name (hidden on small screens) */}
-        <span className="hidden sm:block text-xs font-medium text-slate-300 max-w-[100px] truncate">
+        <span className="hidden sm:block text-xs font-medium text-slate-300 max-w-25 truncate">
           {displayName}
         </span>
         
@@ -89,7 +89,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
           {/* User Info Header */}
           <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/50">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-sm font-bold text-white">
+              <div className="w-10 h-10 rounded-full bg-linear-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-sm font-bold text-white">
                 {getInitials()}
               </div>
               <div className="flex-1 min-w-0">

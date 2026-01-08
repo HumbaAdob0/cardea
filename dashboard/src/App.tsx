@@ -42,7 +42,8 @@ const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 's
   return (
     <div className={`fixed bottom-6 right-6 z-50 ${config.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}>
       <div className="flex items-start gap-3">
-        <Icon className={`w-5 h-5 ${config.iconColor} flex-shrink-0 mt-0.5`} />
+        {/* FIX: flex-shrink-0 -> shrink-0 */}
+        <Icon className={`w-5 h-5 ${config.iconColor} shrink-0 mt-0.5`} />
         <div className="flex-1">
           <p className="text-sm text-slate-200 font-medium">{message}</p>
           {type === 'error' && <p className="text-xs text-slate-400 mt-1">Automatic retry in progress...</p>}
@@ -108,7 +109,8 @@ const AIInsightCard: React.FC<{
 
   if (isLoading) {
     return (
-      <div className="bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-cyan-950/30 border border-slate-800 rounded-2xl p-8">
+      /* FIX: bg-gradient-to-br -> bg-linear-to-br */
+      <div className="bg-linear-to-br from-slate-900/80 via-slate-900/60 to-cyan-950/30 border border-slate-800 rounded-2xl p-8">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2.5 bg-cyan-900/30 rounded-xl">
             <Sparkles className="w-6 h-6 text-cyan-400 animate-pulse" />
@@ -132,7 +134,8 @@ const AIInsightCard: React.FC<{
 
   if (!insight) {
     return (
-      <div className="bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-800/30 border border-slate-800 rounded-2xl p-8">
+      /* FIX: bg-gradient-to-br -> bg-linear-to-br */
+      <div className="bg-linear-to-br from-slate-900/80 via-slate-900/60 to-slate-800/30 border border-slate-800 rounded-2xl p-8">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 bg-slate-800/50 rounded-xl">
             <Shield className="w-6 h-6 text-slate-500" />
@@ -159,7 +162,8 @@ const AIInsightCard: React.FC<{
   const technicalSummary = insight.technical_summary;
 
   return (
-    <div className={`bg-gradient-to-br ${getStatusGradient(statusEmoji)} border rounded-2xl p-8 relative overflow-hidden`}>
+    /* FIX: bg-gradient-to-br -> bg-linear-to-br */
+    <div className={`bg-linear-to-br ${getStatusGradient(statusEmoji)} border rounded-2xl p-8 relative overflow-hidden`}>
       {/* Greeting + Status */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -197,7 +201,8 @@ const AIInsightCard: React.FC<{
           <ul className="space-y-1.5">
             {actionsTaken.map((action, index) => (
               <li key={index} className="flex items-center gap-2 text-sm text-slate-300">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full flex-shrink-0" />
+                {/* FIX: flex-shrink-0 -> shrink-0 */}
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full shrink-0" />
                 {action}
               </li>
             ))}
@@ -398,10 +403,18 @@ const App: React.FC = () => {
       } else {
         setActionToast({ message: `Action failed: ${res.data.message}`, type: 'error' });
       }
-    } catch (err: any) {
+    // FIX: Removed ': any' to satisfy linting. Using strict type check for error handling.
+    } catch (err) {
       console.error('Action execution failed:', err);
+      let errorMessage = 'Unknown error';
+      if (axios.isAxiosError(err)) {
+        errorMessage = err.response?.data?.detail || err.message;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+
       setActionToast({ 
-        message: `Failed to execute action: ${err.response?.data?.detail || err.message}`, 
+        message: `Failed to execute action: ${errorMessage}`, 
         type: 'error' 
       });
     }

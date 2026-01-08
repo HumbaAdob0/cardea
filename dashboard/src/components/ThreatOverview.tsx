@@ -142,7 +142,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
   // Empty/offline state
   if (!isConnected) {
     return (
-      <div className="h-full w-full min-h-[450px] bg-slate-900/40 rounded-xl border border-slate-900 flex items-center justify-center">
+      <div className="h-full w-full min-h-112.5 bg-slate-900/40 rounded-xl border border-slate-900 flex items-center justify-center">
         <div className="text-center px-8">
           <div className="p-4 bg-slate-800/50 rounded-2xl inline-block mb-4">
             <Shield className="w-12 h-12 text-slate-600" />
@@ -158,7 +158,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
 
   if (!alerts || alerts.length === 0) {
     return (
-      <div className="h-full w-full min-h-[450px] bg-slate-900/40 rounded-xl border border-slate-900 flex items-center justify-center">
+      <div className="h-full w-full min-h-112.5 bg-slate-900/40 rounded-xl border border-slate-900 flex items-center justify-center">
         <div className="text-center px-8">
           <div className="p-4 bg-green-950/30 rounded-2xl inline-block mb-4">
             <Shield className="w-12 h-12 text-green-500" />
@@ -180,7 +180,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
   };
 
   return (
-    <div className="h-full w-full min-h-[450px] bg-slate-900/40 rounded-xl border border-slate-900 overflow-hidden">
+    <div className="h-full w-full min-h-112.5 bg-slate-900/40 rounded-xl border border-slate-900 overflow-hidden">
       <div className="p-6 space-y-6">
         {/* Header with trend */}
         <div className="flex items-center justify-between">
