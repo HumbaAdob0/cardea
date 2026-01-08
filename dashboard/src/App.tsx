@@ -371,7 +371,7 @@ const App: React.FC = () => {
     }
   }, [fetchData]);
 
-  const severityStats = data?.alerts_by_severity || {};
+  const severityStats = data?.alerts_by_severity || {} as Record<string, number>;
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
