@@ -88,8 +88,9 @@ resource "azurerm_cognitive_deployment" "oracle_brain" {
     version = "2024-07-18"
   }
 
-  sku {
-    name     = "Standard"
+  # Scale block replaced sku block in newer azurerm provider versions
+  scale {
+    type     = "Standard"
     capacity = 10  # Low capacity is fine for demo
   }
 }
