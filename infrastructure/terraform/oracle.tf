@@ -38,14 +38,15 @@ resource "azurerm_container_registry" "acr" {
 
 # Azure Cache for Redis (managed Redis)
 resource "azurerm_redis_cache" "oracle_redis" {
-  name                = "${var.project_name}-oracle-redis"
-  location            = azurerm_resource_group.cardea_rg.location
-  resource_group_name = azurerm_resource_group.cardea_rg.name
-  capacity            = 0  # C0 = 250MB, smallest tier
-  family              = "C"
-  sku_name            = var.is_production ? "Standard" : "Basic"
-  enable_non_ssl_port = false
-  minimum_tls_version = "1.2"
+  name                          = "${var.project_name}-oracle-redis"
+  location                      = azurerm_resource_group.cardea_rg.location
+  resource_group_name           = azurerm_resource_group.cardea_rg.name
+  capacity                      = 0  # C0 = 250MB, smallest tier
+  family                        = "C"
+  sku_name                      = var.is_production ? "Standard" : "Basic"
+  non_ssl_port_enabled          = false
+  minimum_tls_version           = "1.2"
+  public_network_access_enabled = true
 
   redis_configuration {
     maxmemory_policy = "volatile-lru"

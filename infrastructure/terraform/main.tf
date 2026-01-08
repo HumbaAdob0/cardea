@@ -87,8 +87,8 @@ resource "azurerm_cognitive_deployment" "oracle_brain" {
     version = var.is_production ? "2024-05-13" : "2024-07-18"
   }
 
-  scale {
-    type     = "Standard"
+  sku {
+    name     = "Standard"
     capacity = var.is_production ? 20 : 10
   }
 }
