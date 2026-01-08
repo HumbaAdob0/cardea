@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 import redis.asyncio as redis
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Header
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 
@@ -393,10 +393,19 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/analytics", response_model=AnalyticsResponse)
-    async def get_analytics(time_range: str = "24h"):
+    async def get_analytics(request: Request, time_range: str = "24h"):
+        """
+        Get security analytics for the current user.
+        Data is isolated - users only see their own alerts.
+        """
+        from auth import get_current_user_id
+        
         try:
+            # Get current user for data isolation
+            user_id = await get_current_user_id(request, None)
+            
             async with get_db() as db:
-                analytics_data = await calculate_analytics(db, time_range)
+                analytics_data = await calculate_analytics(db, time_range, user_id=user_id)
             
             # Generate AI insight based on current threat landscape
             ai_insight = await generate_ai_insight(
@@ -806,6 +815,84 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.error(f"Failed to get blocked list: {e}")
             return {"blocked": [], "count": 0, "error": str(e)}
+
+    # ========================================================================
+    # AUTHENTICATION ENDPOINTS
+    # ========================================================================
+    from auth import (
+        RegisterRequest, LoginRequest, VerifyEmailRequest,
+        ForgotPasswordRequest, ResetPasswordRequest,
+        AuthResponse, MessageResponse,
+        register_user, verify_email, login_with_email,
+        forgot_password, reset_password, get_current_user_id
+    )
+    
+    @app.post("/api/auth/register", response_model=MessageResponse)
+    async def api_register(request: RegisterRequest):
+        """
+        Register a new user with email and password.
+        Sends verification email before account is active.
+        """
+        return await register_user(request)
+    
+    @app.post("/api/auth/verify-email", response_model=AuthResponse)
+    async def api_verify_email(request: VerifyEmailRequest):
+        """
+        Verify email address using token from email.
+        Returns auth token on success.
+        """
+        return await verify_email(request)
+    
+    @app.post("/api/auth/login", response_model=AuthResponse)
+    async def api_login(request: LoginRequest):
+        """
+        Login with email and password.
+        Requires verified email.
+        """
+        return await login_with_email(request)
+    
+    @app.post("/api/auth/forgot-password", response_model=MessageResponse)
+    async def api_forgot_password(request: ForgotPasswordRequest):
+        """
+        Request password reset email.
+        """
+        return await forgot_password(request)
+    
+    @app.post("/api/auth/reset-password", response_model=MessageResponse)
+    async def api_reset_password(request: ResetPasswordRequest):
+        """
+        Reset password using token from email.
+        """
+        return await reset_password(request)
+    
+    @app.get("/api/auth/me")
+    async def api_get_current_user(request: Request):
+        """
+        Get current authenticated user info.
+        Works with both JWT and Azure SWA auth.
+        """
+        from auth import get_current_user_id, get_user
+        from fastapi import Request
+        
+        user_id = await get_current_user_id(request, None)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        
+        async with get_db() as db:
+            result = await db.execute(
+                text("SELECT username, email, full_name, roles FROM users WHERE id = :id"),
+                {"id": user_id}
+            )
+            user_data = result.fetchone()
+            if not user_data:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            return {
+                "username": user_data.username,
+                "email": user_data.email,
+                "full_name": user_data.full_name,
+                "roles": user_data.roles or ["user"]
+            }
     
     return app
 
@@ -1339,10 +1426,13 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
     except Exception as e:
         logger.error(f"Background processing failed for alert {alert_id}: {e}")
 
-async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
+async def calculate_analytics(db, time_range: str, user_id: Optional[int] = None) -> dict[str, Any]:
     """
     Calculate analytics for the specified time range.
     Only returns alerts from the requested time period.
+    
+    Data Isolation: If user_id is provided, only returns alerts belonging to that user.
+    If user_id is None (unauthenticated/admin), returns all alerts.
     """
     # Parse time range to get start time
     now = datetime.now(timezone.utc)
@@ -1362,10 +1452,20 @@ async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
         # Default to 24h
         start_time = now - timedelta(hours=24)
     
-    # Query alerts within time range
+    # Build base query with time filter
+    base_filter = Alert.timestamp >= start_time
+    
+    # Add user_id filter for data isolation
+    if user_id is not None:
+        user_filter = Alert.user_id == user_id
+        combined_filter = base_filter & user_filter
+    else:
+        combined_filter = base_filter
+    
+    # Query alerts within time range (and for specific user if authenticated)
     stmt = (
         select(Alert)
-        .where(Alert.timestamp >= start_time)
+        .where(combined_filter)
         .order_by(Alert.timestamp.desc())
         .limit(50)
     )
@@ -1387,20 +1487,20 @@ async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
             "raw_data": alert.raw_data,
         })
     
-    # Count only alerts in time range
-    count_stmt = select(func.count()).select_from(Alert).where(Alert.timestamp >= start_time)
+    # Count only alerts in time range (and for user)
+    count_stmt = select(func.count()).select_from(Alert).where(combined_filter)
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
     
-    # Risk score from alerts in time range
-    risk_stmt = select(func.avg(Alert.threat_score)).select_from(Alert).where(Alert.timestamp >= start_time)
+    # Risk score from alerts in time range (and for user)
+    risk_stmt = select(func.avg(Alert.threat_score)).select_from(Alert).where(combined_filter)
     risk_result = await db.execute(risk_stmt)
     avg_risk = risk_result.scalar() or 0.0
 
-    # Severity stats for alerts in time range
+    # Severity stats for alerts in time range (and for user)
     sev_stmt = (
         select(Alert.severity, func.count(Alert.id))
-        .where(Alert.timestamp >= start_time)
+        .where(combined_filter)
         .group_by(Alert.severity)
     )
     sev_result = await db.execute(sev_stmt)

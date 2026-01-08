@@ -59,12 +59,16 @@ class Alert(Base):
     correlations = Column(JSON, nullable=True)
     indicators = Column(JSON, nullable=True)
     
+    # Multi-tenancy: User who owns this alert (null = system/shared)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
+    
     threat_intel = relationship("ThreatIntelligence", back_populates="alerts")
     
     __table_args__ = (
         Index('idx_alerts_timestamp_severity', 'timestamp', 'severity'),
         Index('idx_alerts_source_type', 'source', 'alert_type'),
         Index('idx_alerts_threat_score', 'threat_score'),
+        Index('idx_alerts_user_id', 'user_id'),
     )
 
 class ThreatIntelligence(Base):
