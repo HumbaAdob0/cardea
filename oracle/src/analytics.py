@@ -3,12 +3,15 @@ Analytics and Threat Processing
 Advanced threat analysis with AI-powered agentic reasoning
 """
 
+import json
 import logging
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from openai import AsyncAzureOpenAI
+from openai.types.chat import ChatCompletion
 
 from config import settings
 from database import Alert, get_db
@@ -39,7 +42,7 @@ class ThreatAnalyzer:
         
         # Initialize Azure OpenAI client
         self.ai_client = None
-        if settings.AI_ENABLED and settings.AZURE_OPENAI_API_KEY:
+        if settings.ai_is_enabled and settings.AZURE_OPENAI_API_KEY:
             try:
                 self.ai_client = AsyncAzureOpenAI(
                     api_key=settings.AZURE_OPENAI_API_KEY,

@@ -77,6 +77,10 @@ class SystemStatus(BaseModel):
     alerts_processed: int
     threat_score_threshold: float
     uptime_seconds: Optional[int] = None
+    lockdown_active: bool = False
+    lockdown_expires: datetime | None = None
+    blocked_ips_count: int = 0
+    monitoring_enhanced: bool = False
 
 class AlertResponse(BaseModel):
     """Response for alert processing"""
@@ -106,15 +110,67 @@ class ThreatAnalysisResponse(BaseModel):
     correlations: list[dict[str, Any]]
     processing_time_ms: int
 
+class ActionButton(BaseModel):
+    """Actionable button for user to click - the AI will execute the action"""
+    id: str = Field(..., description="Unique identifier for the action")
+    label: str = Field(..., description="Button text shown to user")
+    action_type: str = Field(..., description="Type: block_ip, allow_ip, isolate_device, dismiss, learn_more")
+    severity: str = Field(default="info", description="Button color: danger, warning, info, success")
+    target: str | None = Field(default=None, description="Target of action (IP, device ID, etc)")
+    description: str = Field(default="", description="Tooltip explaining what this does")
+
+class SecurityActionRequest(BaseModel):
+    """Request to execute a security action"""
+    action_id: str = Field(..., description="Unique action identifier")
+    action_type: str = Field(..., description="Type of action: block_ip, lockdown, monitor, dismiss, allow_ip")
+    target: str | None = Field(default=None, description="Target (IP addresses, device ID, etc)")
+    duration_minutes: int | None = Field(default=60, description="How long the action should last")
+    reason: str | None = Field(default=None, description="User-provided reason")
+
+class SecurityActionResponse(BaseModel):
+    """Response after executing a security action"""
+    success: bool
+    action_id: str
+    action_type: str
+    message: str = Field(..., description="Human-friendly result message")
+    details: dict[str, Any] = Field(default_factory=dict, description="Technical details")
+    executed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime | None = Field(default=None, description="When the action expires (if temporary)")
+    can_undo: bool = Field(default=False, description="Whether this action can be reversed")
+
+class BlockedEntity(BaseModel):
+    """A blocked IP, domain, or device"""
+    id: str
+    entity_type: str = Field(..., description="ip, domain, device")
+    value: str = Field(..., description="The blocked value (IP address, domain, etc)")
+    reason: str
+    blocked_at: datetime
+    blocked_by: str = Field(default="cardea_ai", description="Who/what blocked it")
+    expires_at: datetime | None = None
+    is_active: bool = True
+
 class AIInsight(BaseModel):
-    """AI-generated security insight for human-readable display"""
-    summary: str = Field(..., description="Brief summary of the security situation")
-    what_happened: str = Field(default="", description="Plain language explanation of events")
-    why_it_matters: str = Field(default="", description="Business impact explanation")
-    recommended_actions: list[str] = Field(default_factory=list, description="Prioritized action items")
-    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="AI confidence in analysis")
+    """AI-generated security insight - conversational, actionable, human-first"""
+    # Conversational greeting - like talking to a security expert friend
+    greeting: str = Field(default="Hey there! 👋", description="Friendly opening")
+    status_emoji: str = Field(default="🟢", description="Quick visual status: 🟢🟡🟠🔴")
+    headline: str = Field(..., description="One-line natural language status")
+    
+    # The story - what the AI discovered, told naturally
+    story: str = Field(default="", description="2-4 sentence narrative of what's happening")
+    
+    # What we (the AI) already did to protect them
+    actions_taken: list[str] = Field(default_factory=list, description="What Cardea already did automatically")
+    
+    # Decisions for the user - simple buttons, not technical instructions
+    decisions: list[ActionButton] = Field(default_factory=list, description="Action buttons for user")
+    
+    # Optional details (hidden by default, expandable)
+    technical_summary: str | None = Field(default=None, description="Technical details for 'show more'")
+    
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    ai_powered: bool = Field(default=False, description="Whether AI was used for this insight")
+    ai_powered: bool = Field(default=False)
 
 class AnalyticsResponse(BaseModel):
     """Analytics data response - aligned with Dashboard frontend types"""
