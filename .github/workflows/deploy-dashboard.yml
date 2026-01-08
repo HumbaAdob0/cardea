@@ -1,19 +1,7 @@
-name: Deploy Dashboard to Azure Static Web App
-
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'dashboard/**'
-  workflow_dispatch:
-
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     name: Build and Deploy
-    
-    # REQUIRED: These permissions allow GitHub to request a token from Azure
     permissions:
       id-token: write
       contents: read
@@ -40,12 +28,11 @@ jobs:
         working-directory: dashboard
         run: |
           npm run build
-          # Critical: Copy config to dist so Azure sees the MIME type settings
           cp staticwebapp.config.json dist/
         env:
           VITE_ORACLE_URL: ${{ vars.ORACLE_URL }}
 
-      # NEW STEP: Log in to Azure using OIDC (Passwordless)
+      # 1. Log in via OIDC (This works now!)
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -53,11 +40,30 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # 2. NEW STEP: Fetch the token dynamically
+      - name: Get Fresh Deployment Token
+        id: get_token
+        run: |
+          # Find the Static Web App name in your resource group
+          # We assume the Resource Group is 'rg-cardea-prod' based on your previous screenshots
+          SWA_NAME=$(az staticwebapp list --resource-group rg-cardea-prod --query "[0].name" -o tsv)
+          
+          echo "Found Static Web App: $SWA_NAME"
+          
+          # Fetch the deployment token
+          TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group rg-cardea-prod --query "properties.apiKey" -o tsv)
+          
+          # Securely pass it to the next step
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      # 3. Deploy using the fresh token
       - name: Deploy to Azure Static Web Apps
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          # REMOVED: azure_static_web_apps_api_token (Not needed with OIDC)
+          # Use the token we just fetched
+          azure_static_web_apps_api_token: ${{ steps.get_token.outputs.token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           app_location: "dashboard/dist" 
