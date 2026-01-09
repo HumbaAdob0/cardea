@@ -464,6 +464,9 @@ const LandingPage = () => {
                     }
                   }
                 }}
+                // FIX: Updated class names to canonical forms (hover:bg-white/6)
+                className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/6 relative group" 
+                style={{ 
                 className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group"
                 style={{
                   fontFamily: 'Inter, Nunito, sans-serif',
@@ -473,7 +476,8 @@ const LandingPage = () => {
                 }}
               >
                 {item.name}
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
+                {/* FIX: Updated class names to canonical forms (bg-linear-to-r) */}
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-linear-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
               </a>
             ))}
             <Link
@@ -482,7 +486,8 @@ const LandingPage = () => {
               style={{ fontFamily: 'Inter, Nunito, sans-serif', fontWeight: 500 }}
             >
               Log In
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
+              {/* FIX: Updated class names to canonical forms (bg-linear-to-r) */}
+              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-linear-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
             </Link>
             <Link
               to="/login"
@@ -831,7 +836,7 @@ const LandingPage = () => {
         <div
           className={`relative z-10 w-full px-8 md:px-16 lg:px-24 transition-all duration-1000 ${featuresVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-7xl mx-auto w-full">
             <div className="flex flex-col justify-center">
               <h2
                 className="text-3xl md:text-4xl lg:text-5xl text-white mb-6 leading-tight"
