@@ -29,13 +29,16 @@ const severityConfig = {
 
 // Toast notification component
 const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 'success'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
-  const config = {
+  // FIX: define specific props (className) instead of 'any' to satisfy ESLint
+  const config: Record<string, { bg: string; icon: React.ElementType<{ className?: string }>; iconColor: string }> = {
     error: { bg: 'bg-red-950/90 border-red-800', icon: XCircle, iconColor: 'text-red-400' },
     warning: { bg: 'bg-yellow-950/90 border-yellow-800', icon: AlertTriangle, iconColor: 'text-yellow-400' },
     info: { bg: 'bg-cyan-950/90 border-cyan-800', icon: Info, iconColor: 'text-cyan-400' },
     success: { bg: 'bg-green-950/90 border-green-800', icon: CheckCircle2, iconColor: 'text-green-400' },
-  }[type];
-  const Icon = config.icon;
+  };
+  
+  const selectedConfig = config[type];
+  const Icon = selectedConfig.icon;
 
   // Auto-dismiss success toasts after 4 seconds
   useEffect(() => {
@@ -46,9 +49,9 @@ const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 's
   }, [type, onDismiss]);
 
   return (
-    <div className={`fixed bottom-6 right-6 z-50 ${config.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}>
+    <div className={`fixed bottom-6 right-6 z-50 ${selectedConfig.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}>
       <div className="flex items-start gap-3">
-        <Icon className={`w-5 h-5 ${config.iconColor} shrink-0 mt-0.5`} />
+        <Icon className={`w-5 h-5 ${selectedConfig.iconColor} shrink-0 mt-0.5`} />
         <div className="flex-1">
           <p className="text-sm text-slate-200 font-medium">{message}</p>
           {type === 'error' && <p className="text-xs text-slate-400 mt-1">Automatic retry in progress...</p>}
@@ -258,7 +261,8 @@ const AIInsightCard: React.FC<{
 };
 
 // Empty State Component
-const EmptyState: React.FC<{ title: string; description: string; icon?: React.ElementType }> = ({ 
+// FIX: Use { className?: string } instead of 'any'
+const EmptyState: React.FC<{ title: string; description: string; icon?: React.ElementType<{ className?: string }> }> = ({ 
   title, description, icon: Icon = AlertCircle 
 }) => (
   <div className="flex flex-col items-center justify-center py-16 px-8">

@@ -19,7 +19,8 @@ const safeEntries = (obj: unknown): [string, number][] => {
 };
 
 // Source type icons
-const sourceIcons: Record<string, React.ElementType> = {
+// FIX: Use { className?: string } instead of 'any' to satisfy ESLint
+const sourceIcons: Record<string, React.ElementType<{ className?: string }>> = {
   suricata: Shield,
   zeek: Eye,
   kitnet: Activity,
