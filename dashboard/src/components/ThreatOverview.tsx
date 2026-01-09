@@ -40,6 +40,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
   isConnected 
 }) => {
   // FIX: Create a strictly typed local reference to prevent 'never' inference errors
+  // This forces TypeScript to treat the object as a Dictionary, even if it's empty.
   const safeSeverityStats = (severityStats || {}) as Record<string, number>;
 
   // Calculate stats from alerts
@@ -289,7 +290,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             <span>Severity Distribution</span>
           </div>
           <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-800">
-            {/* FIX: Use safeSeverityStats */}
+            {/* FIX: Using safeSeverityStats instead of severityStats to fix type inference */}
             {Object.entries(safeSeverityStats).map(([severity, count]) => {
               const total = Object.values(safeSeverityStats).reduce((a, b) => a + b, 0);
               const percentage = total > 0 ? (count / total) * 100 : 0;
@@ -305,7 +306,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             })}
           </div>
           <div className="flex justify-between text-[8px] text-slate-600 uppercase">
-            {/* FIX: Use safeSeverityStats */}
+            {/* FIX: Using safeSeverityStats instead of severityStats to fix type inference */}
             {Object.entries(safeSeverityStats).map(([severity, count]) => (
               <span key={severity} className="flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityColors[severity]}`} />

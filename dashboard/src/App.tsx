@@ -289,7 +289,7 @@ const ConnectionStatus: React.FC<{ isConnected: boolean; isRetrying: boolean }> 
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const navigate = useNavigate(); // Hook for redirection
+  const navigate = useNavigate();
 
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -301,7 +301,6 @@ const App: React.FC = () => {
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
 
-  // REDIRECT LOGIC: If done loading and not authenticated, go to login
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       navigate('/login');
@@ -370,12 +369,11 @@ const App: React.FC = () => {
     }
   }, [fetchData]);
 
-  // FIX: Force type annotation on the variable
-  const severityStats: Record<string, number> = data?.alerts_by_severity || {};
+  // FIX: Force cast the entire expression with parentheses to ensure type safety
+  const severityStats = (data?.alerts_by_severity || {}) as Record<string, number>;
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
-  // Render loading state while checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -387,7 +385,6 @@ const App: React.FC = () => {
     );
   }
 
-  // If not authenticated, we return null because the useEffect above handles the redirect
   if (!isAuthenticated) return null;
 
   return (
@@ -513,7 +510,8 @@ const App: React.FC = () => {
                       <p className="text-5xl font-extralight">{data.total_alerts || 0}</p>
                       {Object.keys(severityStats).length > 0 && (
                         <div className="flex gap-3 mt-4">
-                          {Object.entries(severityStats).map(([severity, count]) => {
+                          {/* FIX: Inline cast here as well to satisfy loop inference */}
+                          {Object.entries(severityStats as Record<string, number>).map(([severity, count]) => {
                             const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
                             return (
                               <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
