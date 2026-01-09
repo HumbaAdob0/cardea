@@ -300,7 +300,7 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
               return (
                 <div
                   key={severity}
-                  className={`${severityColors[severity]} transition-all duration-500`}
+                  className={`${severityColors[severity as keyof typeof severityColors]} transition-all duration-500`}
                   style={{ width: `${percentage}%` }}
                   title={`${severity}: ${count} (${percentage.toFixed(1)}%)`}
                 />

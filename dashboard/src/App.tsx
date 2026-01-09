@@ -571,7 +571,7 @@ const App: React.FC = () => {
                       </tr>
                     ) : data?.alerts && data.alerts.length > 0 ? (
                       data.alerts.map((alert: Alert) => {
-                        const config = severityConfig[alert.severity] || severityConfig.low;
+                        const config = severityConfig[alert.severity as keyof typeof severityConfig] || severityConfig.low;
                         const SeverityIcon = config.icon;
                         return (
                         <tr key={alert.id} className="hover:bg-slate-900/40 transition-colors group">
