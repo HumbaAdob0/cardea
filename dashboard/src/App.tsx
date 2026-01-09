@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; // Added this
+import { useNavigate } from "react-router-dom";
 import {
   Shield,
   Activity,
@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import type { AnalyticsResponse, Alert, AIInsight } from "./types";
 import { ThreatOverview } from "./components/ThreatOverview";
-// REMOVED: import LoginPage from './components/LoginPage';
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 
@@ -99,7 +98,8 @@ const Toast: React.FC<{
       className={`fixed bottom-6 right-6 z-50 ${config.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}
     >
       <div className="flex items-start gap-3">
-        <Icon className={`w-5 h-5 ${selectedConfig.iconColor} shrink-0 mt-0.5`} />
+        {/* FIX: Changed selectedConfig.iconColor to config.iconColor */}
+        <Icon className={`w-5 h-5 ${config.iconColor} shrink-0 mt-0.5`} />
         <div className="flex-1">
           <p className="text-sm text-slate-200 font-medium">{message}</p>
           {type === "error" && (
@@ -475,11 +475,6 @@ const App: React.FC = () => {
     }
   }, [fetchData, isAuthenticated]);
 
-  // Calculate severity stats for display
-  const severityStats = data?.alerts_by_severity || {};
-  const criticalCount = severityStats["critical"] || 0;
-  const highCount = severityStats["high"] || 0;
-
   // Set static tab title for dashboard endpoint
   useEffect(() => {
     document.title = "Cardea | Dashboard";
@@ -526,7 +521,9 @@ const App: React.FC = () => {
     },
     [fetchData]
   );
+  
   // FIX: Explicitly type this as Record<string, number> so we don't need 'as any' later
+  // Removed duplicate declarations that were causing errors
   const severityStats: Record<string, number> = data?.alerts_by_severity || {};
   // FIX: Access properties using bracket notation or strict typing to avoid 'any'
   const criticalCount = severityStats['critical'] || 0;
